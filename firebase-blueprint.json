@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account for Koperasi Garuda Merah Putih with role-based access control",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "client", "supplier"] },
+        "phone": { "type": "string" },
+        "companyName": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "joinedDate": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Purchase order submitted by client with budget proposal and review flow",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "poNumber": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "clientPhone": { "type": "string" },
+        "orderDate": { "type": "string" },
+        "requiredDate": { "type": "string" },
+        "totalClientBudget": { "type": "number" },
+        "totalApprovedAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "deliveryAddress": { "type": "string" },
+        "clientNotes": { "type": "string" },
+        "cooperativeNotes": { "type": "string" },
+        "invoiceId": { "type": "string" },
+        "officialOrderNumber": { "type": "string" },
+        "isOfficialOrder": { "type": "boolean" },
+        "convertedAt": { "type": "string" },
+        "rejectionReason": { "type": "string" },
+        "approvalNotes": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "poNumber", "clientId", "status", "totalClientBudget"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Commodity inventory item in cooperative warehouse",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "category": { "type": "string" },
+        "currentStock": { "type": "number" },
+        "minStock": { "type": "number" },
+        "unit": { "type": "string" },
+        "unitCost": { "type": "number" },
+        "standardPrice": { "type": "number" },
+        "storageLocation": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "sku", "currentStock", "standardPrice"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Billing and payment invoice for clients and suppliers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "type": { "type": "string", "enum": ["CLIENT_BILL", "SUPPLIER_PAYABLE"] },
+        "referenceNo": { "type": "string" },
+        "partyId": { "type": "string" },
+        "partyName": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "bankAccount": { "type": "string" }
+      },
+      "required": ["id", "invoiceNumber", "type", "totalAmount", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and RBAC credentials"
+    },
+    "/purchaseOrders/{poId}": {
+      "schema": "PurchaseOrder",
+      "description": "Purchase orders and offer review states"
+    },
+    "/inventory/{itemId}": {
+      "schema": "InventoryItem",
+      "description": "Inventory commodities and stocks"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Billing invoices for clients and payables for suppliers"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Koperasi Garuda Merah Putih - Sistem Inventaris & Manajemen Pesanan",
+  "description": "Sistem inventaris terpadu Koperasi Garuda Merah Putih untuk manajemen stok, penerimaan supplier, PO klien dengan kustomisasi budget, pelacakan real-time, ringkasan arus kas keuangan, serta notifikasi WhatsApp dan Email.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
