@@ -179,18 +179,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </button>
 
-          <button
-            onClick={() => onSelectTab('notifications')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer text-left ${
-              currentTab === 'notifications'
-                ? 'bg-red-600 text-white shadow-sm shadow-red-200'
-                : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-            }`}
-          >
-            <BellRing className="w-4 h-4 shrink-0" />
-            <span>Log Notif WA & Email</span>
-          </button>
-
           <div className="mt-4 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-600">
             Administrasi & Peran
           </div>
@@ -274,18 +262,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Receipt className="w-4 h-4 shrink-0" />
             <span>Tagihan & Bukti Bayar</span>
           </button>
-
-          <button
-            onClick={() => onSelectTab('notifications')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer text-left ${
-              currentTab === 'notifications'
-                ? 'bg-blue-600 text-white shadow-sm shadow-blue-200'
-                : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-            }`}
-          >
-            <BellRing className="w-4 h-4 shrink-0" />
-            <span>Riwayat Notifikasi</span>
-          </button>
         </>
       );
     }
@@ -330,18 +306,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <DollarSign className="w-4 h-4 shrink-0" />
           <span>Tagihan & Pencairan Dana</span>
-        </button>
-
-        <button
-          onClick={() => onSelectTab('notifications')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer text-left ${
-            currentTab === 'notifications'
-              ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-200'
-              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-          }`}
-        >
-          <BellRing className="w-4 h-4 shrink-0" />
-          <span>Notifikasi Pengiriman</span>
         </button>
       </>
     );

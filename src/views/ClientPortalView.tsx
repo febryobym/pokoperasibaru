@@ -272,7 +272,7 @@ export const ClientPortalView: React.FC<ClientPortalViewProps> = ({
                 Purchase Order {submittedPO.poNumber} Berhasil Diajukan!
               </p>
               <p className="text-xs text-emerald-100">
-                Status saat ini: <strong className="text-white">DIAJUKAN (Menunggu Review Koperasi)</strong>. Notifikasi otomatis via WhatsApp dan Email telah terkirim.
+                Status saat ini: <strong className="text-white">DIAJUKAN (Menunggu Review Koperasi)</strong>. Pengajuan Anda telah terdaftar dalam sistem.
               </p>
             </div>
           </div>

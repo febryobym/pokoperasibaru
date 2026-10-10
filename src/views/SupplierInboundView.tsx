@@ -23,12 +23,16 @@ export const SupplierInboundView: React.FC = () => {
     openInvoiceModal,
     invoices,
     currentUser,
+    users,
   } = useApp();
 
+  const supplierUsers = users.filter((u) => u.role === 'supplier');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [selectedSupplier, setSelectedSupplier] = useState('CV Tani Jaya Agro Makmur');
-  const [supplierPhone, setSupplierPhone] = useState('081122334455');
-  const [supplierEmail, setSupplierEmail] = useState('sales@tanijayaagro.com');
+  const [selectedSupplier, setSelectedSupplier] = useState(
+    supplierUsers[0]?.companyName || supplierUsers[0]?.name || ''
+  );
+  const [supplierPhone, setSupplierPhone] = useState(supplierUsers[0]?.phone || '');
+  const [supplierEmail, setSupplierEmail] = useState('');
   const [deliveryDate, setDeliveryDate] = useState(
     new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
@@ -294,19 +298,34 @@ export const SupplierInboundView: React.FC = () => {
                 </label>
                 <select
                   value={selectedSupplier}
-                  onChange={(e) => setSelectedSupplier(e.target.value)}
+                  onChange={(e) => {
+                    const supName = e.target.value;
+                    setSelectedSupplier(supName);
+                    const matched = supplierUsers.find(
+                      (u) => u.companyName === supName || u.name === supName
+                    );
+                    if (matched) {
+                      setSupplierPhone(matched.phone);
+                    }
+                  }}
                   className="w-full p-2 border border-slate-300 rounded-lg"
                 >
-                  <option value="CV Tani Jaya Agro Makmur">CV Tani Jaya Agro Makmur (Sembako & Pangan)</option>
-                  <option value="PT Semen Nusantara Perkasa">PT Semen Nusantara Perkasa (Material Konstruksi)</option>
-                  <option value="Distributor Pangan Mandiri">Distributor Pangan Mandiri</option>
+                  {supplierUsers.length > 0 ? (
+                    supplierUsers.map((u) => (
+                      <option key={u.id} value={u.companyName || u.name}>
+                        {u.companyName || u.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Belum ada supplier terdaftar (Tambahkan di Pengguna)</option>
+                  )}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    No. WhatsApp Supplier
+                    No. Telepon Supplier
                   </label>
                   <input
                     type="tel"

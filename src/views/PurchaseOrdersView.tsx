@@ -704,7 +704,7 @@ export const PurchaseOrdersView: React.FC = () => {
 
                       <p className="text-xs text-slate-500 mt-1">
                         Klien Pemesan: <span className="font-bold text-slate-800">{po.clientName}</span>{' '}
-                        • Telp: {po.clientPhone} • Email: {po.clientEmail}
+                        • Telp: {po.clientPhone}
                       </p>
                     </div>
                   </div>
@@ -956,40 +956,17 @@ export const PurchaseOrdersView: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="flex gap-2">
-                        {relatedInv && (
+                      {relatedInv && (
+                        <div className="flex gap-2">
                           <button
                             onClick={() => openInvoiceModal(relatedInv)}
                             className="flex-1 py-1.5 px-2 bg-white hover:bg-slate-100 text-slate-800 font-bold rounded-lg border border-slate-200 text-center transition cursor-pointer flex items-center justify-center gap-1"
                           >
                             <FileText className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Faktur</span>
+                            <span>Buka Faktur Tagihan</span>
                           </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            const text = `Halo ${po.clientName}, pesanan ${po.poNumber} Anda di Koperasi Garuda Merah Putih saat ini berstatus: [${po.status}]. Total Nilai: ${formatRupiah(po.totalApprovedAmount || po.totalClientBudget)}.`;
-                            triggerNotification(
-                              'WHATSAPP',
-                              po.clientName,
-                              po.clientPhone,
-                              `Update ${po.poNumber}`,
-                              text,
-                              po.poNumber
-                            );
-                            const cleanP = po.clientPhone.replace(/\D/g, '').replace(/^0/, '62');
-                            window.open(
-                              `https://wa.me/${cleanP}?text=${encodeURIComponent(text)}`,
-                              '_blank'
-                            );
-                          }}
-                          className="py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-center transition cursor-pointer flex items-center justify-center gap-1"
-                          title="Kirim Notifikasi WhatsApp"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>WA</span>
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1384,7 +1361,7 @@ export const PurchaseOrdersView: React.FC = () => {
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    No. Telepon / WhatsApp *
+                    No. Telepon *
                   </label>
                   <input
                     type="text"
@@ -1745,7 +1722,7 @@ export const PurchaseOrdersView: React.FC = () => {
               {actionType === 'APPROVE' && (
                 <p className="text-emerald-700">
                   Dengan menyetujui penawaran ini, status PO akan berubah menjadi{' '}
-                  <strong>DISETUJUI</strong> dan notifikasi otomatis (WhatsApp & Email) akan dikirimkan ke klien. Setelah disetujui, Anda dapat mengonversi PO ini menjadi Pesanan Resmi (SPK).
+                  <strong>DISETUJUI</strong> dan siap untuk dikonversi menjadi Pesanan Resmi (SPK).
                 </p>
               )}
 

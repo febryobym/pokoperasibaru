@@ -93,13 +93,6 @@ export const POTrackerModal: React.FC = () => {
     setShowConvertDialog(false);
   };
 
-  const sendQuickWA = () => {
-    const text = `Halo ${po.clientName}, update pesanan ${po.poNumber}: Status saat ini [${po.status}]. Silakan cek rincian di portal Koperasi Garuda Merah Putih.`;
-    triggerNotification('WHATSAPP', po.clientName, po.clientPhone, `Update ${po.poNumber}`, text, po.poNumber);
-    const cleanP = po.clientPhone.replace(/\D/g, '').replace(/^0/, '62');
-    window.open(`https://wa.me/${cleanP}?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
   const getStatusBadge = (status: POStatus) => {
     switch (status) {
       case 'DIAJUKAN':
@@ -167,14 +160,6 @@ export const POTrackerModal: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={sendQuickWA}
-              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-              title="Kirim Notifikasi Cepat ke WhatsApp Klien"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">WhatsApp Klien</span>
-            </button>
             <button
               onClick={closePOModal}
               className="p-1 rounded text-slate-400 hover:text-white transition cursor-pointer"
@@ -644,7 +629,7 @@ export const POTrackerModal: React.FC = () => {
                 Tolak Penawaran Budget Klien
               </h5>
               <p className="text-red-700">
-                Tuliskan alasan penolakan secara jelas. Klien akan menerima notifikasi otomatis via WhatsApp dan Email.
+                Tuliskan alasan penolakan secara jelas agar dapat ditinjau oleh pemohon.
               </p>
               <div>
                 <label className="block font-semibold text-red-900 mb-1">
@@ -664,7 +649,7 @@ export const POTrackerModal: React.FC = () => {
                   onClick={handleConfirmRejection}
                   className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition cursor-pointer"
                 >
-                  Kirim Penolakan & Notifikasi
+                  Simpan Penolakan
                 </button>
                 <button
                   type="button"

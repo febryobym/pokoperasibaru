@@ -98,6 +98,40 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const STORAGE_KEY_PREFIX = 'garuda_mp_';
+const DATA_VERSION_KEY = 'garuda_mp_clean_v3';
+
+// Clear out old sample data if not migrated
+if (typeof window !== 'undefined' && localStorage.getItem(DATA_VERSION_KEY) !== 'yes') {
+  localStorage.removeItem(`${STORAGE_KEY_PREFIX}inventory`);
+  localStorage.removeItem(`${STORAGE_KEY_PREFIX}movements`);
+  localStorage.removeItem(`${STORAGE_KEY_PREFIX}pos`);
+  localStorage.removeItem(`${STORAGE_KEY_PREFIX}inbounds`);
+  localStorage.removeItem(`${STORAGE_KEY_PREFIX}invoices`);
+  localStorage.removeItem(`${STORAGE_KEY_PREFIX}notifications`);
+
+  // Clean users to purge sample users (client1, client2, supplier1, supplier2)
+  const savedUsers = localStorage.getItem(`${STORAGE_KEY_PREFIX}users`);
+  if (savedUsers) {
+    try {
+      const parsed: User[] = JSON.parse(savedUsers);
+      const cleanUsers = parsed.filter(
+        (u) =>
+          u.id === 'usr-admin-1' ||
+          (!u.id.startsWith('usr-client') && !u.id.startsWith('usr-supplier'))
+      );
+      if (cleanUsers.length === 0) {
+        localStorage.setItem(`${STORAGE_KEY_PREFIX}users`, JSON.stringify(INITIAL_USERS));
+      } else {
+        localStorage.setItem(`${STORAGE_KEY_PREFIX}users`, JSON.stringify(cleanUsers));
+      }
+    } catch {
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}users`, JSON.stringify(INITIAL_USERS));
+    }
+  } else {
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}users`, JSON.stringify(INITIAL_USERS));
+  }
+  localStorage.setItem(DATA_VERSION_KEY, 'yes');
+}
 
 let globalIdCounter = 0;
 export const generateUniqueId = (prefix: string) => {
@@ -107,20 +141,27 @@ export const generateUniqueId = (prefix: string) => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load or fallback to mock
+  // Load users
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}users`);
     if (saved) {
       try {
         const parsed: User[] = JSON.parse(saved);
-        return parsed.map((u) => {
-          const matchInitial = INITIAL_USERS.find((init) => init.id === u.id);
-          return {
-            ...u,
-            username: u.username || matchInitial?.username || (u.role === 'admin' ? 'admin' : u.id.replace('usr-', '')),
-            password: u.password || matchInitial?.password || (u.role === 'admin' ? 'admin123' : `${u.role}123`),
-          };
-        });
+        const filtered = parsed.filter(
+          (u) =>
+            u.id === 'usr-admin-1' ||
+            (!u.id.startsWith('usr-client') && !u.id.startsWith('usr-supplier'))
+        );
+        if (filtered.length > 0) {
+          return filtered.map((u) => {
+            const matchInitial = INITIAL_USERS.find((init) => init.id === u.id);
+            return {
+              ...u,
+              username: u.username || matchInitial?.username || (u.role === 'admin' ? 'admin' : u.id.replace('usr-', '')),
+              password: u.password || matchInitial?.password || (u.role === 'admin' ? 'admin123' : `${u.role}123`),
+            };
+          });
+        }
       } catch {
         return INITIAL_USERS;
       }
@@ -138,6 +179,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (saved) {
       try {
         const parsed: User = JSON.parse(saved);
+        if (parsed.id.startsWith('usr-client') || parsed.id.startsWith('usr-supplier')) {
+          return INITIAL_USERS[0];
+        }
         const matchInitial = INITIAL_USERS.find((init) => init.id === parsed.id);
         return {
           ...parsed,
@@ -153,12 +197,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [inventory, setInventory] = useState<InventoryItem[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}inventory`);
-    return saved ? JSON.parse(saved) : INITIAL_INVENTORY;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}movements`);
-    if (!saved) return INITIAL_STOCK_MOVEMENTS;
+    if (!saved) return [];
     try {
       const parsed: StockMovement[] = JSON.parse(saved);
       const seen = new Set<string>();
@@ -172,29 +216,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return item;
       });
     } catch {
-      return INITIAL_STOCK_MOVEMENTS;
+      return [];
     }
   });
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}pos`);
-    return saved ? JSON.parse(saved) : INITIAL_PURCHASE_ORDERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [supplierInbounds, setSupplierInbounds] = useState<SupplierInbound[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}inbounds`);
-    return saved ? JSON.parse(saved) : INITIAL_SUPPLIER_INBOUND;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}invoices`);
-    return saved ? JSON.parse(saved) : INITIAL_INVOICES;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  const [notifications, setNotifications] = useState<NotificationLog[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}notifications`);
-    return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-  });
+  const [notifications, setNotifications] = useState<NotificationLog[]>([]);
 
   // Modal states
   const [activeNotificationModal, setActiveNotificationModal] = useState<{
@@ -252,23 +293,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Firestore synchronization on mount for PuchaseOrder database
   useEffect(() => {
     let isMounted = true;
+    const samplePOIds = [
+      'po-new-diajukan',
+      'po-new-disetujui',
+      'po-new-ditolak',
+      'po-new-resmi',
+      'po-1',
+      'po-2',
+      'po-3',
+    ];
     const syncFirestorePOs = async () => {
       try {
         const poColRef = collection(db, 'purchaseOrders');
         const snapshot = await getDocs(poColRef);
         if (!snapshot.empty) {
           const remotePOs: PurchaseOrder[] = [];
-          snapshot.forEach((docSnap) => {
-            remotePOs.push(docSnap.data() as PurchaseOrder);
-          });
-          if (isMounted && remotePOs.length > 0) {
-            // Sort by orderDate descending
+          for (const docSnap of snapshot.docs) {
+            const data = docSnap.data() as PurchaseOrder;
+            if (
+              samplePOIds.includes(docSnap.id) ||
+              samplePOIds.includes(data.id) ||
+              data.clientName?.includes('Sumber Makmur') ||
+              data.clientName?.includes('Berkah Abadi')
+            ) {
+              // Delete old sample PO from Firestore permanently
+              deleteDoc(doc(db, 'purchaseOrders', docSnap.id)).catch(() => {});
+            } else {
+              remotePOs.push(data);
+            }
+          }
+          if (isMounted) {
             setPurchaseOrders(remotePOs);
           }
         } else {
-          // Seed initial POs to Firestore
-          for (const po of INITIAL_PURCHASE_ORDERS) {
-            await setDoc(doc(db, 'purchaseOrders', po.id), po);
+          // Never seed sample data!
+          if (isMounted) {
+            setPurchaseOrders([]);
           }
         }
       } catch (err) {
@@ -391,42 +451,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const triggerNotification = (
-    type: 'WHATSAPP' | 'EMAIL',
-    recipientName: string,
-    recipientContact: string,
-    subject: string,
-    message: string,
-    reference: string
+    _type: 'WHATSAPP' | 'EMAIL',
+    _recipientName: string,
+    _recipientContact: string,
+    _subject: string,
+    _message: string,
+    _reference: string
   ) => {
-    const newNotif: NotificationLog = {
-      id: generateUniqueId('notif'),
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      type,
-      recipientName,
-      recipientContact,
-      subject,
-      message,
-      status: 'TERKIRIM',
-      relatedReference: reference,
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
+    // Disabled: Semua notifikasi WhatsApp & Email telah dihilangkan sesuai permintaan
   };
 
   const triggerDualNotification = (
-    clientName: string,
-    phone: string,
-    email: string,
-    subject: string,
-    waMsg: string,
-    emailMsg: string,
-    reference: string
+    _clientName: string,
+    _phone: string,
+    _email: string,
+    _subject: string,
+    _waMsg: string,
+    _emailMsg: string,
+    _reference: string
   ) => {
-    if (phone) {
-      triggerNotification('WHATSAPP', clientName, phone, subject, waMsg, reference);
-    }
-    if (email) {
-      triggerNotification('EMAIL', clientName, email, subject, emailMsg, reference);
-    }
+    // Disabled: Semua notifikasi WhatsApp & Email telah dihilangkan sesuai permintaan
   };
 
   // Inventory actions
@@ -1233,13 +1277,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resetAllData = () => {
     setUsers(INITIAL_USERS);
     setCurrentUser(INITIAL_USERS[0]);
-    setInventory(INITIAL_INVENTORY);
-    setStockMovements(INITIAL_STOCK_MOVEMENTS);
-    setPurchaseOrders(INITIAL_PURCHASE_ORDERS);
-    setSupplierInbounds(INITIAL_SUPPLIER_INBOUND);
-    setInvoices(INITIAL_INVOICES);
-    setNotifications(INITIAL_NOTIFICATIONS);
+    setInventory([]);
+    setStockMovements([]);
+    setPurchaseOrders([]);
+    setSupplierInbounds([]);
+    setInvoices([]);
+    setNotifications([]);
     localStorage.clear();
+    localStorage.setItem(DATA_VERSION_KEY, 'yes');
   };
 
   return (

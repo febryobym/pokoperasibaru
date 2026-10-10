@@ -104,16 +104,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
   };
 
-  // 7-day flow mock data visualization
-  const flowDays = [
-    { day: '04 Okt', inQty: 100, outQty: 60 },
-    { day: '05 Okt', inQty: 0, outQty: 45 },
-    { day: '06 Okt', inQty: 80, outQty: 90 },
-    { day: '07 Okt', inQty: 80, outQty: 30 },
-    { day: '08 Okt', inQty: 250, outQty: 20 },
-    { day: '09 Okt', inQty: 0, outQty: 65 },
-    { day: '10 Okt', inQty: 140, outQty: 80 },
-  ];
+  // 7-day flow calculated dynamically from real stockMovements
+  const flowDays = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const dateStr = d.toISOString().split('T')[0];
+    const dayLabel = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+    const inQty = stockMovements
+      .filter((m) => m.type === 'IN' && m.date && m.date.startsWith(dateStr))
+      .reduce((acc, m) => acc + m.quantity, 0);
+    const outQty = stockMovements
+      .filter((m) => m.type === 'OUT' && m.date && m.date.startsWith(dateStr))
+      .reduce((acc, m) => acc + m.quantity, 0);
+    return { day: dayLabel, inQty, outQty };
+  });
 
   return (
     <div className="space-y-6">

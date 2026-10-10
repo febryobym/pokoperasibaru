@@ -1,18 +1,15 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import {
-  Bell,
   LogOut,
 } from 'lucide-react';
 
 interface NavbarProps {
-  onOpenNotifications: () => void;
+  onOpenNotifications?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenNotifications }) => {
-  const { currentUser, logout, notifications } = useApp();
-
-  const unreadCount = notifications.slice(0, 5).length;
+export const Navbar: React.FC<NavbarProps> = () => {
+  const { currentUser, logout } = useApp();
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -81,20 +78,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNotifications }) => {
                 </span>
               )}
             </div>
-
-            {/* Notification Bell */}
-            <button
-              onClick={onOpenNotifications}
-              className="relative p-2 rounded-lg text-slate-600 hover:text-red-700 hover:bg-slate-100 transition cursor-pointer"
-              title="Lihat Log Notifikasi WA & Email"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
 
             {/* Current Active User Profile Summary */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-200">

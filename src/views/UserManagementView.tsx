@@ -95,12 +95,15 @@ export const UserManagementView: React.FC = () => {
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim()) {
-      showNotification('error', 'Nama, Email, dan Nomor WhatsApp wajib diisi.');
+    if (!formData.name.trim() || !formData.phone.trim()) {
+      showNotification('error', 'Nama dan Nomor Telepon wajib diisi.');
       return;
     }
 
-    const defaultUsername = formData.username.trim() || formData.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    const defaultUsername =
+      formData.username.trim() ||
+      formData.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10) ||
+      'user';
     const defaultPassword = formData.password.trim() || (formData.role === 'admin' ? 'admin123' : `${formData.role}123`);
 
     if (editingUser) {
@@ -505,7 +508,7 @@ export const UserManagementView: React.FC = () => {
                 <th className="p-3.5">Profil Pengguna</th>
                 <th className="p-3.5">Peran / Izin</th>
                 <th className="p-3.5">Perusahaan / Afiliasi</th>
-                <th className="p-3.5">Kontak (WhatsApp & Email)</th>
+                <th className="p-3.5">No. Telepon & Kontak</th>
                 <th className="p-3.5">Status Akun</th>
                 <th className="p-3.5 text-right">Aksi Manajemen</th>
               </tr>
@@ -587,23 +590,9 @@ export const UserManagementView: React.FC = () => {
 
                       {/* Contact */}
                       <td className="p-3.5">
-                        <div className="space-y-0.5">
-                          <a
-                            href={`mailto:${user.email}`}
-                            className="flex items-center gap-1.5 text-slate-700 hover:text-blue-600 font-medium"
-                          >
-                            <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span>{user.email}</span>
-                          </a>
-                          <a
-                            href={`https://wa.me/${user.phone.replace(/\D/g, '').replace(/^0/, '62')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-slate-600 hover:text-emerald-600"
-                          >
-                            <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="font-mono text-[11px]">{user.phone}</span>
-                          </a>
+                        <div className="flex items-center gap-1.5 text-slate-700">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="font-mono text-xs font-semibold">{user.phone}</span>
                         </div>
                       </td>
 
@@ -773,35 +762,19 @@ export const UserManagementView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Email & Phone */}
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Alamat Email Resmi *
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="pengguna@perusahaan.com"
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Nomor WhatsApp / Kontak *
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="081234567890"
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    required
-                  />
-                </div>
+              {/* Phone */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Nomor Telepon Kontak *
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="081234567890"
+                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  required
+                />
               </div>
 
               {/* Login Credentials (Username & Password) */}
@@ -822,7 +795,7 @@ export const UserManagementView: React.FC = () => {
                       className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white"
                     />
                     <span className="text-[10px] text-slate-400">
-                      Bila kosong, dibuat otomatis dari email
+                      Bila kosong, dibuat otomatis dari nama pengguna
                     </span>
                   </div>
 

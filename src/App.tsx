@@ -7,7 +7,6 @@ import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar, TabType } from './components/Sidebar';
-import { NotificationModal } from './components/NotificationModal';
 import { InvoiceDetailModal } from './components/InvoiceDetailModal';
 import { POTrackerModal } from './components/POTrackerModal';
 import { DashboardView } from './views/DashboardView';
@@ -15,13 +14,12 @@ import { InventoryView } from './views/InventoryView';
 import { PurchaseOrdersView } from './views/PurchaseOrdersView';
 import { SupplierInboundView } from './views/SupplierInboundView';
 import { FinanceBillingView } from './views/FinanceBillingView';
-import { NotificationsLogView } from './views/NotificationsLogView';
 import { ClientPortalView } from './views/ClientPortalView';
 import { SupplierPortalView } from './views/SupplierPortalView';
 import { UserManagementView } from './views/UserManagementView';
 import { FinancialReportsModule } from './components/FinancialReportsModule';
 import { LoginPage } from './views/LoginPage';
-import { Menu, ShieldAlert } from 'lucide-react';
+import { Menu } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
   const { currentUser } = useApp();
@@ -50,8 +48,6 @@ const MainLayout: React.FC = () => {
           return <ClientPortalView initialSubTab="track" />;
         case 'client-invoices':
           return <ClientPortalView initialSubTab="invoices" />;
-        case 'notifications':
-          return <NotificationsLogView />;
         default:
           return <ClientPortalView initialSubTab="create-po" />;
       }
@@ -64,8 +60,6 @@ const MainLayout: React.FC = () => {
           return <SupplierPortalView initialSubTab="deliveries" />;
         case 'supplier-invoices':
           return <SupplierPortalView initialSubTab="invoices" />;
-        case 'notifications':
-          return <NotificationsLogView />;
         default:
           return <SupplierPortalView initialSubTab="deliveries" />;
       }
@@ -86,8 +80,6 @@ const MainLayout: React.FC = () => {
         return <FinanceBillingView />;
       case 'financial-reports':
         return <FinancialReportsModule />;
-      case 'notifications':
-        return <NotificationsLogView />;
       case 'users':
         return <UserManagementView />;
       case 'client-portal':
@@ -110,7 +102,7 @@ const MainLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-900 flex flex-col font-sans antialiased">
       {/* Top Header */}
-      <Navbar onOpenNotifications={() => setCurrentTab('notifications')} />
+      <Navbar />
 
       {/* Mobile Menu Bar */}
       <div className="lg:hidden bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between">
@@ -144,7 +136,6 @@ const MainLayout: React.FC = () => {
       </div>
 
       {/* Global Interactive Modals */}
-      <NotificationModal />
       <InvoiceDetailModal />
       <POTrackerModal />
     </div>
