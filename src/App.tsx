@@ -20,6 +20,7 @@ import { ClientPortalView } from './views/ClientPortalView';
 import { SupplierPortalView } from './views/SupplierPortalView';
 import { UserManagementView } from './views/UserManagementView';
 import { FinancialReportsModule } from './components/FinancialReportsModule';
+import { LoginPage } from './views/LoginPage';
 import { Menu, ShieldAlert } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
@@ -120,8 +121,8 @@ const MainLayout: React.FC = () => {
           <Menu className="w-4 h-4 text-red-600" />
           <span>Menu Navigasi</span>
         </button>
-        <span className="text-xs font-semibold text-slate-600 capitalize">
-          Mode: <span className="text-red-700 font-bold">{currentUser.role}</span>
+        <span className="text-xs font-semibold text-slate-600 truncate max-w-[180px]">
+          Akun: <span className="text-red-700 font-bold">{currentUser.name}</span>
         </span>
       </div>
 
@@ -150,10 +151,20 @@ const MainLayout: React.FC = () => {
   );
 };
 
+const RootApp: React.FC = () => {
+  const { isAuthenticated } = useApp();
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return <MainLayout />;
+};
+
 export default function App() {
   return (
     <AppProvider>
-      <MainLayout />
+      <RootApp />
     </AppProvider>
   );
 }

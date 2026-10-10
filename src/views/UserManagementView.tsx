@@ -16,7 +16,6 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
-  LogIn,
   Info,
   Phone,
   Mail,
@@ -28,7 +27,7 @@ import {
 } from 'lucide-react';
 
 export const UserManagementView: React.FC = () => {
-  const { users, currentUser, addNewUser, updateUser, deleteUser, switchUserRole } = useApp();
+  const { users, currentUser, addNewUser, updateUser, deleteUser } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | UserRole>('ALL');
@@ -43,6 +42,8 @@ export const UserManagementView: React.FC = () => {
   // Form states
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
+    password: '',
     email: '',
     phone: '',
     role: 'client' as UserRole,
@@ -61,6 +62,8 @@ export const UserManagementView: React.FC = () => {
     setEditingUser(null);
     setFormData({
       name: '',
+      username: '',
+      password: '',
       email: '',
       phone: '',
       role: 'client',
@@ -76,6 +79,8 @@ export const UserManagementView: React.FC = () => {
     setEditingUser(user);
     setFormData({
       name: user.name,
+      username: user.username || '',
+      password: user.password || '',
       email: user.email,
       phone: user.phone,
       role: user.role,
@@ -95,10 +100,15 @@ export const UserManagementView: React.FC = () => {
       return;
     }
 
+    const defaultUsername = formData.username.trim() || formData.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    const defaultPassword = formData.password.trim() || (formData.role === 'admin' ? 'admin123' : `${formData.role}123`);
+
     if (editingUser) {
       // Update existing user
       updateUser(editingUser.id, {
         name: formData.name.trim(),
+        username: defaultUsername,
+        password: defaultPassword,
         email: formData.email.trim(),
         phone: formData.phone.trim(),
         role: formData.role,
@@ -113,6 +123,8 @@ export const UserManagementView: React.FC = () => {
       addNewUser(
         {
           name: formData.name.trim(),
+          username: defaultUsername,
+          password: defaultPassword,
           email: formData.email.trim(),
           phone: formData.phone.trim(),
           role: formData.role,
@@ -124,7 +136,7 @@ export const UserManagementView: React.FC = () => {
         },
         false
       );
-      showNotification('success', `Pengguna baru ${formData.name} berhasil ditambahkan dengan peran ${formData.role.toUpperCase()}.`);
+      showNotification('success', `Pengguna baru ${formData.name} berhasil ditambahkan dengan username "${defaultUsername}".`);
     }
 
     setIsModalOpen(false);
@@ -539,7 +551,12 @@ export const UserManagementView: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            <span className="text-[10px] text-slate-400 font-mono">
+                            <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono mt-0.5">
+                              <span>user: <strong className="text-slate-800">{user.username || '-'}</strong></span>
+                              <span>•</span>
+                              <span>pass: <strong className="text-slate-800">{user.password || '******'}</strong></span>
+                            </div>
+                            <span className="text-[9px] text-slate-400 font-mono">
                               ID: {user.id}
                             </span>
                           </div>
@@ -611,21 +628,6 @@ export const UserManagementView: React.FC = () => {
                       {/* Actions */}
                       <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Impersonate / Switch User */}
-                          {!isCurrentActive && (
-                            <button
-                              onClick={() => {
-                                switchUserRole(user.id);
-                                showNotification('success', `Berhasil beralih profil login sebagai ${user.name} (${user.role.toUpperCase()}).`);
-                              }}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer flex items-center gap-1"
-                              title="Masuk / Uji Hak Akses sebagai pengguna ini"
-                            >
-                              <LogIn className="w-3.5 h-3.5 text-blue-600" />
-                              <span className="hidden xl:inline">Masuk</span>
-                            </button>
-                          )}
-
                           {/* Edit User */}
                           <button
                             onClick={() => handleOpenEditModal(user)}
@@ -799,6 +801,46 @@ export const UserManagementView: React.FC = () => {
                     className="w-full p-2 border border-slate-300 rounded-lg"
                     required
                   />
+                </div>
+              </div>
+
+              {/* Login Credentials (Username & Password) */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Kredensial Masuk Sistem (Username & Password)
+                </p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Username Login
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      placeholder={editingUser?.username || 'Contoh: ahmad1 / supplier3'}
+                      className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white"
+                    />
+                    <span className="text-[10px] text-slate-400">
+                      Bila kosong, dibuat otomatis dari email
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Kata Sandi (Password)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder={editingUser?.password || 'Contoh: user123'}
+                      className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white"
+                    />
+                    <span className="text-[10px] text-slate-400">
+                      Password untuk otentikasi login
+                    </span>
+                  </div>
                 </div>
               </div>
 

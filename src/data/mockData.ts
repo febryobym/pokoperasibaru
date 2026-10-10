@@ -67,6 +67,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr-admin-1',
     name: 'Bpk. Hendra Gunawan',
+    username: 'admin',
+    password: 'admin123',
     email: 'pengurus@koperasigarudamp.id',
     phone: '081298765432',
     role: 'admin',
@@ -80,6 +82,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr-client-1',
     name: 'Ibu Ratna Dewi (Procurement)',
+    username: 'client1',
+    password: 'client123',
     email: 'procurement@sumbermakmur.co.id',
     phone: '081311223344',
     role: 'client',
@@ -93,6 +97,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr-client-2',
     name: 'Bpk. Farhan Hakim',
+    username: 'client2',
+    password: 'client123',
     email: 'logistik@berkahabadi.com',
     phone: '081288990011',
     role: 'client',
@@ -106,6 +112,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr-supplier-1',
     name: 'Bpk. Sutrisno Widodo',
+    username: 'supplier1',
+    password: 'supplier123',
     email: 'sales@tanijayaagro.com',
     phone: '081122334455',
     role: 'supplier',
@@ -119,6 +127,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr-supplier-2',
     name: 'Ibu Linda Susanti',
+    username: 'supplier2',
+    password: 'supplier123',
     email: 'distribusi@semennusantara.co.id',
     phone: '081577889900',
     role: 'supplier',

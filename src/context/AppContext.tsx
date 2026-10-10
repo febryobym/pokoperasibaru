@@ -23,6 +23,11 @@ import {
 } from '../data/mockData';
 
 interface AppContextType {
+  // Auth
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => { success: boolean; message?: string };
+  logout: () => void;
+
   currentUser: User;
   users: User[];
   setCurrentUser: (user: User) => void;
@@ -105,12 +110,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Load or fallback to mock
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}users`);
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
+    if (saved) {
+      try {
+        const parsed: User[] = JSON.parse(saved);
+        return parsed.map((u) => {
+          const matchInitial = INITIAL_USERS.find((init) => init.id === u.id);
+          return {
+            ...u,
+            username: u.username || matchInitial?.username || (u.role === 'admin' ? 'admin' : u.id.replace('usr-', '')),
+            password: u.password || matchInitial?.password || (u.role === 'admin' ? 'admin123' : `${u.role}123`),
+          };
+        });
+      } catch {
+        return INITIAL_USERS;
+      }
+    }
+    return INITIAL_USERS;
+  });
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}is_authenticated`);
+    return saved === 'true';
   });
 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}current_user`);
-    return saved ? JSON.parse(saved) : INITIAL_USERS[0];
+    if (saved) {
+      try {
+        const parsed: User = JSON.parse(saved);
+        const matchInitial = INITIAL_USERS.find((init) => init.id === parsed.id);
+        return {
+          ...parsed,
+          username: parsed.username || matchInitial?.username || (parsed.role === 'admin' ? 'admin' : 'user'),
+          password: parsed.password || matchInitial?.password || 'admin123',
+        };
+      } catch {
+        return INITIAL_USERS[0];
+      }
+    }
+    return INITIAL_USERS[0];
   });
 
   const [inventory, setInventory] = useState<InventoryItem[]>(() => {
@@ -207,6 +245,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`${STORAGE_KEY_PREFIX}notifications`, JSON.stringify(notifications));
   }, [notifications]);
 
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}is_authenticated`, String(isAuthenticated));
+  }, [isAuthenticated]);
+
   // Firestore synchronization on mount for PuchaseOrder database
   useEffect(() => {
     let isMounted = true;
@@ -239,7 +281,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Helpers
+  // Helpers & Authentication
+  const login = (usernameInput: string, passwordInput: string): { success: boolean; message?: string } => {
+    const trimmedUser = usernameInput.trim().toLowerCase();
+    const trimmedPass = passwordInput.trim();
+
+    if (!trimmedUser || !trimmedPass) {
+      return { success: false, message: 'Username dan kata sandi (password) wajib diisi.' };
+    }
+
+    const matchedUser = users.find((u) => {
+      const uName = (u.username || '').toLowerCase();
+      const uEmail = (u.email || '').toLowerCase();
+      const uEmailPrefix = uEmail.split('@')[0];
+
+      if (uName === trimmedUser) return true;
+      if (trimmedUser === 'admin' && u.role === 'admin') return true;
+      if (trimmedUser === 'client' && u.role === 'client') return true;
+      if (trimmedUser === 'supplier' && u.role === 'supplier') return true;
+      if (uEmailPrefix === trimmedUser) return true;
+      return false;
+    });
+
+    if (!matchedUser) {
+      return {
+        success: false,
+        message: 'Username tidak terdaftar. Masukkan username akun yang telah ditentukan (contoh: admin, client1, supplier1).',
+      };
+    }
+
+    const expectedPassword = matchedUser.password || (matchedUser.role === 'admin' ? 'admin123' : `${matchedUser.role}123`);
+    if (trimmedPass !== expectedPassword) {
+      return {
+        success: false,
+        message: 'Kata sandi salah. Silakan coba kembali dengan kata sandi yang sesuai.',
+      };
+    }
+
+    setCurrentUser(matchedUser);
+    setIsAuthenticated(true);
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}current_user`, JSON.stringify(matchedUser));
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}is_authenticated`, 'true');
+    return { success: true };
+  };
+
+  const logout = () => {
+    setIsAuthenticated(false);
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}is_authenticated`, 'false');
+  };
+
   const switchUserRole = (userId: string) => {
     const found = users.find((u) => u.id === userId);
     if (found) setCurrentUser(found);
@@ -1155,6 +1245,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
+        isAuthenticated,
+        login,
+        logout,
         currentUser,
         users,
         setCurrentUser,

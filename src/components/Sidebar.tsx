@@ -15,6 +15,7 @@ import {
   Building,
   Users,
   Scale,
+  LogOut,
 } from 'lucide-react';
 
 export type TabType =
@@ -50,7 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen,
   onCloseMobile,
 }) => {
-  const { currentUser, users, purchaseOrders, invoices, supplierInbounds, inventory } = useApp();
+  const { currentUser, users, purchaseOrders, invoices, supplierInbounds, inventory, logout } = useApp();
 
   // Badges
   const pendingPOs = purchaseOrders.filter((po) => po.status === 'DIAJUKAN' || po.status === 'MENUNGGU_REVIEW').length;
@@ -364,6 +365,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <p className="text-[10px] text-slate-600 mt-1">
             Status Sistem: <span className="text-emerald-700 font-bold">Online & Real-time</span>
           </p>
+
+          <button
+            onClick={() => {
+              if (window.confirm('Apakah Anda yakin ingin keluar dari sistem?')) {
+                logout();
+              }
+            }}
+            className="w-full mt-3 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white border border-red-200 hover:bg-red-50 text-red-700 font-bold text-xs transition cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Keluar Akun (Logout)</span>
+          </button>
         </div>
       </aside>
 
@@ -391,6 +404,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 {renderNavLinks()}
               </div>
+            </div>
+
+            {/* Mobile drawer logout */}
+            <div className="pt-4 mt-4 border-t border-slate-200">
+              <button
+                onClick={() => {
+                  if (onCloseMobile) onCloseMobile();
+                  if (window.confirm('Apakah Anda yakin ingin keluar dari sistem?')) {
+                    logout();
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 font-bold text-xs transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Keluar Akun (Logout)</span>
+              </button>
             </div>
           </div>
         </div>
