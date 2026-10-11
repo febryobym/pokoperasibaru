@@ -375,6 +375,8 @@ export const PurchaseOrdersView: React.FC = () => {
         standardPrice: itm.standardPrice,
         targetPrice: row.targetPrice,
         approvedPrice: row.targetPrice,
+        category: itm.category,
+        supplierName: itm.supplierName || 'Supplier Mitra Koperasi',
         notes: `Didaftarkan oleh Pengurus Admin Koperasi Garuda Merah Putih`,
       };
     });

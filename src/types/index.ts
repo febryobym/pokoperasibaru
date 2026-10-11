@@ -79,6 +79,8 @@ export interface POItem {
   targetPrice: number; // Budget / Penawaran yang diajukan oleh Klien
   approvedPrice: number; // Harga final yang disetujui Koperasi
   notes?: string;
+  category?: 'Bahan Operasional' | 'Bahan Baku';
+  supplierName?: string;
 }
 
 export type POStatus = 

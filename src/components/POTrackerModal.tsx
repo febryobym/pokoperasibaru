@@ -322,9 +322,27 @@ export const POTrackerModal: React.FC = () => {
                       <tr key={item.itemId} className="hover:bg-slate-50/60">
                         <td className="p-3 font-semibold text-slate-800">
                           {item.itemName}
-                          <span className="block text-[10px] font-mono text-slate-400">
-                            {item.sku}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {item.sku}
+                            </span>
+                            {item.category && (
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                  item.category === 'Bahan Baku'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-indigo-100 text-indigo-800'
+                                }`}
+                              >
+                                {item.category}
+                              </span>
+                            )}
+                            {item.supplierName && (
+                              <span className="text-[9px] text-slate-500 font-medium">
+                                • Supplier: {item.supplierName}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 text-slate-700">
                           {item.quantity} {item.unit}
