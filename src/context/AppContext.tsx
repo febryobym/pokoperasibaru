@@ -61,6 +61,8 @@ interface AppContextType {
   supplierInbounds: SupplierInbound[];
   createSupplierInbound: (inbound: Omit<SupplierInbound, 'id' | 'inboundNumber' | 'status' | 'paymentStatus'>) => void;
   receiveSupplierInbound: (inboundId: string) => void;
+  updateSupplierInbound: (id: string, updates: Partial<SupplierInbound>) => void;
+  deleteSupplierInbound: (inboundId: string) => { success: boolean; message: string };
   
   // Invoices & Billing
   invoices: Invoice[];
@@ -1143,6 +1145,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const updateSupplierInbound = (id: string, updates: Partial<SupplierInbound>) => {
+    setSupplierInbounds((prev) =>
+      prev.map((inbound) => {
+        if (inbound.id !== id) return inbound;
+        const updated = { ...inbound, ...updates };
+
+        if (updates.totalAmount !== undefined || updates.supplierName || updates.receivedDate) {
+          setInvoices((prevInv) =>
+            prevInv.map((inv) =>
+              inv.referenceNo === inbound.inboundNumber
+                ? {
+                    ...inv,
+                    totalAmount: updates.totalAmount ?? inv.totalAmount,
+                    partyName: updates.supplierName ?? inv.partyName,
+                    partyPhone: updates.supplierPhone ?? inv.partyPhone,
+                    issueDate: updates.receivedDate ?? inv.issueDate,
+                  }
+                : inv
+            )
+          );
+        }
+        return updated;
+      })
+    );
+  };
+
+  const deleteSupplierInbound = (inboundId: string): { success: boolean; message: string } => {
+    const target = supplierInbounds.find((i) => i.id === inboundId);
+    if (!target) {
+      return { success: false, message: 'Data penerimaan supplier tidak ditemukan.' };
+    }
+
+    setSupplierInbounds((prev) => prev.filter((i) => i.id !== inboundId));
+
+    if (target.inboundNumber) {
+      setInvoices((prev) => prev.filter((inv) => inv.referenceNo !== target.inboundNumber));
+    }
+
+    deleteDoc(doc(db, 'supplierInbounds', inboundId)).catch((err) =>
+      console.warn('Firestore delete error (delete inbound):', err)
+    );
+
+    return { success: true, message: `Penerimaan supplier ${target.inboundNumber} berhasil dihapus.` };
+  };
+
   // Invoices & Billing
   const uploadPaymentProof = (invoiceId: string, proofUrl: string, paymentMethod: string) => {
     const inv = invoices.find((i) => i.id === invoiceId);
@@ -1318,6 +1365,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supplierInbounds,
         createSupplierInbound,
         receiveSupplierInbound,
+        updateSupplierInbound,
+        deleteSupplierInbound,
         invoices,
         uploadPaymentProof,
         verifyPayment,
