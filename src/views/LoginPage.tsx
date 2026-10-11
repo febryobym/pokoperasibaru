@@ -24,49 +24,17 @@ export const LoginPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Preset accounts guide for convenience
-  const presetAccounts = [
-    {
-      role: 'admin',
-      roleLabel: 'Pengurus / Admin Koperasi',
-      username: 'admin',
-      password: 'admin123',
-      name: 'Bpk. Hendra Gunawan',
-      company: 'Koperasi Garuda Merah Putih',
-      description: 'Akses penuh ke Dasbor, Inventaris Stok, Persetujuan PO, Laporan Laba Rugi & Arus Kas, dan Manajemen Pengguna.',
-      badgeColor: 'bg-red-50 text-red-700 border-red-200',
-      icon: Building2,
-      iconColor: 'text-red-600',
-    },
-    {
-      role: 'client',
-      roleLabel: 'Klien Tetap (Korporat)',
-      username: 'client1',
-      password: 'client123',
-      name: 'Ibu Ratna Dewi',
-      company: 'PT Sumber Makmur Nusantara',
-      description: 'Akses Portal Klien: Ajukan PO dengan Budget Khusus, Lacak Pesanan Real-Time, & Pembayaran Tagihan.',
-      badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-      icon: UserCheck,
-      iconColor: 'text-blue-600',
-    },
-    {
-      role: 'supplier',
-      roleLabel: 'Supplier Tetap (Pemasok)',
-      username: 'supplier1',
-      password: 'supplier123',
-      name: 'Bpk. Sutrisno Widodo',
-      company: 'CV Tani Jaya Agro Makmur',
-      description: 'Akses Portal Supplier: Jadwalkan Pasokan Masuk ke Gudang Koperasi & Monitor Tagihan Pencairan Dana.',
-      badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      icon: Truck,
-      iconColor: 'text-emerald-600',
-    },
-  ];
+  // Preset admin account for convenience
+  const defaultAdmin = {
+    username: 'admin',
+    password: 'admin123',
+    name: 'Administrator Koperasi',
+    roleLabel: 'Admin Koperasi',
+  };
 
-  const handleSelectPreset = (presetUser: string, presetPass: string) => {
-    setUsername(presetUser);
-    setPassword(presetPass);
+  const handleSelectAdmin = () => {
+    setUsername(defaultAdmin.username);
+    setPassword(defaultAdmin.password);
     setErrorMessage(null);
   };
 
@@ -230,61 +198,44 @@ export const LoginPage: React.FC = () => {
           <div className="mt-6 pt-5 border-t border-slate-200">
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Kredensial Akun Bawaan (Preset)
+                Akun Bawaan Sistem
               </span>
-              <span className="text-[10px] text-slate-400">Pilih untuk auto-fill</span>
+              <span className="text-[10px] text-slate-400">Klik untuk auto-fill</span>
             </div>
 
-            <div className="space-y-2">
-              {presetAccounts.map((item) => {
-                const IconComponent = item.icon;
-                const isSelected = username === item.username;
-                return (
-                  <button
-                    key={item.role}
-                    type="button"
-                    onClick={() => handleSelectPreset(item.username, item.password)}
-                    className={`w-full text-left p-2.5 rounded-xl border transition flex items-center justify-between cursor-pointer ${
-                      isSelected
-                        ? 'border-red-400 bg-red-50/60 shadow-xs ring-1 ring-red-400/30'
-                        : 'border-slate-200 hover:border-slate-300 bg-slate-50 hover:bg-slate-100/80'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                          item.role === 'admin'
-                            ? 'bg-red-100 text-red-700'
-                            : item.role === 'client'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}
-                      >
-                        <IconComponent className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-slate-900 truncate">
-                            {item.roleLabel}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          user: <span className="font-bold text-slate-700">{item.username}</span> | pass:{' '}
-                          <span className="font-bold text-slate-700">{item.password}</span>
-                        </div>
-                      </div>
-                    </div>
-                    {isSelected ? (
-                      <CheckCircle2 className="w-4 h-4 text-red-600 shrink-0 ml-2" />
-                    ) : (
-                      <span className="text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md shrink-0 ml-2">
-                        Pilih
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              type="button"
+              onClick={handleSelectAdmin}
+              className={`w-full text-left p-3 rounded-xl border transition flex items-center justify-between cursor-pointer ${
+                username === defaultAdmin.username
+                  ? 'border-red-400 bg-red-50/60 shadow-xs ring-1 ring-red-400/30'
+                  : 'border-slate-200 hover:border-slate-300 bg-slate-50 hover:bg-slate-100/80'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-red-100 text-red-700">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-900 truncate">
+                      {defaultAdmin.roleLabel}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    user: <span className="font-bold text-slate-700">{defaultAdmin.username}</span> | pass:{' '}
+                    <span className="font-bold text-slate-700">{defaultAdmin.password}</span>
+                  </div>
+                </div>
+              </div>
+              {username === defaultAdmin.username ? (
+                <CheckCircle2 className="w-4 h-4 text-red-600 shrink-0 ml-2" />
+              ) : (
+                <span className="text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md shrink-0 ml-2">
+                  Pilih
+                </span>
+              )}
+            </button>
           </div>
         </div>
 

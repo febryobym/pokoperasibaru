@@ -131,8 +131,7 @@ export const InvoiceDetailModal: React.FC = () => {
                   {isClientBill ? 'DITUJUKAN KEPADA (KLIEN):' : 'PEMASOK / SUPPLIER:'}
                 </p>
                 <p className="font-bold text-slate-900 text-sm">{invoice.partyName}</p>
-                <p className="text-slate-600 mt-0.5">{invoice.partyEmail}</p>
-                <p className="text-slate-600">{invoice.partyPhone}</p>
+                <p className="text-slate-600 mt-0.5">{invoice.partyPhone}</p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">

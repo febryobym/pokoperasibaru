@@ -974,7 +974,7 @@ export const FinancialReportsModule: React.FC = () => {
                               <p className="font-bold text-slate-900">
                                 {c.client.companyName || c.client.name}
                               </p>
-                              <p className="text-[10px] text-slate-400">{c.client.email} • {c.client.phone}</p>
+                              <p className="text-[10px] text-slate-400">{c.client.phone}</p>
                             </td>
                             <td className="p-3 text-center font-bold text-slate-700">{c.poCount} PO</td>
                             <td className="p-3 text-right font-semibold text-blue-900">
