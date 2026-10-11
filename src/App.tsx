@@ -58,6 +58,8 @@ const MainLayout: React.FC = () => {
         case 'supplier-portal':
         case 'supplier-deliveries':
           return <SupplierPortalView initialSubTab="deliveries" />;
+        case 'supplier-products':
+          return <SupplierPortalView initialSubTab="products" />;
         case 'supplier-invoices':
           return <SupplierPortalView initialSubTab="invoices" />;
         default:
@@ -92,6 +94,8 @@ const MainLayout: React.FC = () => {
       case 'supplier-portal':
       case 'supplier-deliveries':
         return <SupplierPortalView initialSubTab="deliveries" />;
+      case 'supplier-products':
+        return <SupplierPortalView initialSubTab="products" />;
       case 'supplier-invoices':
         return <SupplierPortalView initialSubTab="invoices" />;
       default:
