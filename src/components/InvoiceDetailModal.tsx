@@ -12,6 +12,7 @@ import {
   FileText,
   DollarSign,
   Download,
+  Trash2,
 } from 'lucide-react';
 
 export const InvoiceDetailModal: React.FC = () => {
@@ -22,6 +23,7 @@ export const InvoiceDetailModal: React.FC = () => {
     uploadPaymentProof,
     verifyPayment,
     paySupplierInvoice,
+    deleteInvoice,
   } = useApp();
 
   const [paymentMethod, setPaymentMethod] = useState('Transfer Bank Mandiri');
@@ -29,6 +31,7 @@ export const InvoiceDetailModal: React.FC = () => {
     'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500&auto=format&fit=crop&q=80'
   );
   const [showProofUpload, setShowProofUpload] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!activeInvoiceModal.isOpen || !activeInvoiceModal.data) return null;
 
@@ -303,10 +306,47 @@ export const InvoiceDetailModal: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-slate-100 border-t border-slate-200 flex justify-end">
+        <div className="px-6 py-3 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            {isAdmin && !showDeleteConfirm && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border border-rose-200"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Hapus Faktur Ini</span>
+              </button>
+            )}
+
+            {isAdmin && showDeleteConfirm && (
+              <div className="flex items-center gap-2 animate-in fade-in">
+                <span className="text-xs font-semibold text-rose-700">Yakin hapus faktur ini?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    deleteInvoice(invoice.id);
+                    closeInvoiceModal();
+                  }}
+                  className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Ya, Hapus</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={closeInvoiceModal}
-            className="px-4 py-1.5 bg-slate-300 hover:bg-slate-400 text-slate-800 rounded-lg text-xs font-bold transition cursor-pointer"
+            className="px-4 py-1.5 bg-slate-300 hover:bg-slate-400 text-slate-800 rounded-lg text-xs font-bold transition cursor-pointer ml-auto"
           >
             Tutup
           </button>

@@ -66,6 +66,7 @@ interface AppContextType {
   
   // Invoices & Billing
   invoices: Invoice[];
+  deleteInvoice: (invoiceId: string) => { success: boolean; message: string };
   uploadPaymentProof: (invoiceId: string, proofUrl: string, paymentMethod: string) => void;
   verifyPayment: (invoiceId: string) => void;
   paySupplierInvoice: (invoiceId: string, paymentMethod: string) => void;
@@ -1299,6 +1300,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const deleteInvoice = (invoiceId: string): { success: boolean; message: string } => {
+    const target = invoices.find((i) => i.id === invoiceId);
+    if (!target) {
+      return { success: false, message: 'Data tagihan/faktur tidak ditemukan.' };
+    }
+
+    setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
+
+    deleteDoc(doc(db, 'invoices', invoiceId)).catch((err) =>
+      console.warn('Firestore delete error (delete invoice):', err)
+    );
+
+    // Unlink from PO if any
+    setPurchaseOrders((prev) =>
+      prev.map((po) =>
+        po.invoiceId === invoiceId ? { ...po, invoiceId: undefined } : po
+      )
+    );
+
+    // Unlink from supplier inbounds if any
+    setSupplierInbounds((prev) =>
+      prev.map((inbound) =>
+        inbound.invoiceNumber === target.invoiceNumber
+          ? { ...inbound, invoiceNumber: undefined }
+          : inbound
+      )
+    );
+
+    // Close invoice modal if currently open with this invoice
+    if (activeInvoiceModal.isOpen && activeInvoiceModal.data?.id === invoiceId) {
+      setActiveInvoiceModal({ isOpen: false, data: null });
+    }
+
+    return { success: true, message: `Tagihan ${target.invoiceNumber} berhasil dihapus.` };
+  };
+
   // Modals
   const openNotificationModal = (notif: NotificationLog) => {
     setActiveNotificationModal({ isOpen: true, data: notif });
@@ -1368,6 +1405,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSupplierInbound,
         deleteSupplierInbound,
         invoices,
+        deleteInvoice,
         uploadPaymentProof,
         verifyPayment,
         paySupplierInvoice,

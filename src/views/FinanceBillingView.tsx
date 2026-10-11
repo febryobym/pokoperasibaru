@@ -18,6 +18,7 @@ import {
   Scale,
   BarChart3,
   Info,
+  Trash2,
 } from 'lucide-react';
 import { Invoice } from '../types';
 import { FinancialReportsModule } from '../components/FinancialReportsModule';
@@ -30,6 +31,7 @@ export const FinanceBillingView: React.FC = () => {
     openInvoiceModal,
     verifyPayment,
     paySupplierInvoice,
+    deleteInvoice,
     currentUser,
   } = useApp();
 
@@ -37,6 +39,8 @@ export const FinanceBillingView: React.FC = () => {
   const [filterType, setFilterType] = useState<'ALL' | 'CLIENT' | 'SUPPLIER'>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('SEMUA');
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteModalInvoice, setDeleteModalInvoice] = useState<Invoice | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const formatRupiah = (num: number) => {
     return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
@@ -105,6 +109,22 @@ export const FinanceBillingView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="text-emerald-600 hover:text-emerald-900 font-bold ml-2 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -424,6 +444,18 @@ export const FinanceBillingView: React.FC = () => {
                               Bayar Supplier
                             </button>
                           )}
+
+                        {/* Tombol Hapus khusus role Admin */}
+                        {currentUser.role === 'admin' && (
+                          <button
+                            onClick={() => setDeleteModalInvoice(inv)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg transition cursor-pointer flex items-center gap-1 border border-rose-200"
+                            title="Hapus Faktur Tagihan ini"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Hapus</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -435,6 +467,93 @@ export const FinanceBillingView: React.FC = () => {
       </div>
     </>
   )}
+
+      {/* Modal Konfirmasi Hapus Tagihan */}
+      {deleteModalInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200">
+            <div className="flex items-center gap-3 text-rose-600 mb-4 pb-3 border-b border-slate-100">
+              <div className="p-2.5 bg-rose-50 rounded-xl">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Konfirmasi Hapus Tagihan</h3>
+                <p className="text-xs text-slate-500">Tindakan ini tidak dapat dibatalkan</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs mb-6">
+              <p className="text-slate-600">
+                Apakah Anda yakin ingin menghapus data faktur tagihan berikut dari pembukuan?
+              </p>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-slate-900 text-sm">
+                    {deleteModalInvoice.invoiceNumber}
+                  </span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                      deleteModalInvoice.type === 'CLIENT_BILL'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {deleteModalInvoice.type === 'CLIENT_BILL' ? 'TAGIHAN KLIEN' : 'HUTANG SUPPLIER'}
+                  </span>
+                </div>
+                <p className="text-slate-600 text-xs">
+                  Mitra: <strong>{deleteModalInvoice.partyName}</strong>
+                </p>
+                <p className="text-slate-600 text-xs">
+                  Jumlah: <strong className="text-slate-900">{formatRupiah(deleteModalInvoice.totalAmount)}</strong>
+                </p>
+                <p className="text-slate-500 text-[11px]">
+                  Status: <span className="font-bold uppercase">{deleteModalInvoice.status.replace('_', ' ')}</span>
+                </p>
+                {deleteModalInvoice.referenceNo && (
+                  <p className="text-slate-400 font-mono text-[10px]">
+                    No. Referensi: {deleteModalInvoice.referenceNo}
+                  </p>
+                )}
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Menghapus tagihan ini akan menghapusnya dari monitoring arus kas, rekapitulasi piutang/hutang, dan laporan keuangan.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setDeleteModalInvoice(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteModalInvoice) {
+                    const res = deleteInvoice(deleteModalInvoice.id);
+                    setDeleteModalInvoice(null);
+                    if (res?.message) {
+                      setToastMessage(res.message);
+                      setTimeout(() => setToastMessage(null), 4000);
+                    }
+                  }
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-sm"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Ya, Hapus Tagihan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 </div>
   );
 };
