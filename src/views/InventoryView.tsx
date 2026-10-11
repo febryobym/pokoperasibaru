@@ -4,17 +4,10 @@ import {
   Package,
   Plus,
   Search,
-  Filter,
   ArrowDownLeft,
   ArrowUpRight,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
   Trash2,
   Edit,
-  TrendingDown,
-  Warehouse,
-  Truck,
   Layers,
 } from 'lucide-react';
 import { InventoryItem } from '../types';
@@ -27,7 +20,10 @@ export const InventoryView: React.FC = () => {
     updateInventoryItem,
     deleteInventoryItem,
     currentUser,
+    users,
   } = useApp();
+
+  const suppliers = users.filter((u) => u.role === 'supplier');
 
   const [activeTab, setActiveTab] = useState<'items' | 'movements'>('items');
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,24 +31,38 @@ export const InventoryView: React.FC = () => {
   const [movementFilter, setMovementFilter] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // Form states for new item
+  // Edit item state (admin can edit product name and details)
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    category: 'Bahan Operasional' as InventoryItem['category'],
+    unit: '',
+    minStock: 10,
+    supplierId: '',
+    supplierName: '',
+    warehouseLocation: '',
+    description: '',
+  });
+
+  // Form states for new item (without costPrice & standardPrice as requested)
   const [newItem, setNewItem] = useState({
     sku: '',
     name: '',
-    category: 'Sembako & Pangan' as InventoryItem['category'],
-    unit: 'Karung',
-    currentStock: 50,
-    minStock: 20,
-    costPrice: 150000,
-    standardPrice: 175000,
-    supplierId: 'usr-supplier-1',
-    supplierName: 'CV Tani Jaya Agro Makmur',
-    warehouseLocation: 'Gudang Utama Blok A',
+    category: 'Bahan Operasional' as InventoryItem['category'],
+    unit: 'Unit',
+    currentStock: 0,
+    minStock: 10,
+    costPrice: 0,
+    standardPrice: 0,
+    supplierId: '',
+    supplierName: '',
+    warehouseLocation: 'Gudang Utama',
     description: '',
   });
 
   const formatRupiah = (num: number) => {
-    return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
+    if (!num || num === 0) return '-';
+    return 'Rp ' + Number(num).toLocaleString('id-ID');
   };
 
   // Filter items
@@ -82,15 +92,15 @@ export const InventoryView: React.FC = () => {
 
     addInventoryItem({
       sku: newItem.sku.toUpperCase(),
-      name: newItem.name,
+      name: newItem.name.trim(),
       category: newItem.category,
       unit: newItem.unit,
-      currentStock: Number(newItem.currentStock),
-      minStock: Number(newItem.minStock),
-      costPrice: Number(newItem.costPrice),
-      standardPrice: Number(newItem.standardPrice),
+      currentStock: Number(newItem.currentStock || 0),
+      minStock: Number(newItem.minStock || 0),
+      costPrice: 0,
+      standardPrice: 0,
       supplierId: newItem.supplierId,
-      supplierName: newItem.supplierName,
+      supplierName: newItem.supplierName.trim() || 'Supplier Umum',
       warehouseLocation: newItem.warehouseLocation,
       description: newItem.description,
     });
@@ -99,17 +109,49 @@ export const InventoryView: React.FC = () => {
     setNewItem({
       sku: '',
       name: '',
-      category: 'Sembako & Pangan',
-      unit: 'Karung',
-      currentStock: 50,
-      minStock: 20,
-      costPrice: 150000,
-      standardPrice: 175000,
-      supplierId: 'usr-supplier-1',
-      supplierName: 'CV Tani Jaya Agro Makmur',
-      warehouseLocation: 'Gudang Utama Blok A',
+      category: 'Bahan Operasional',
+      unit: 'Unit',
+      currentStock: 0,
+      minStock: 10,
+      costPrice: 0,
+      standardPrice: 0,
+      supplierId: '',
+      supplierName: '',
+      warehouseLocation: 'Gudang Utama',
       description: '',
     });
+  };
+
+  const handleStartEdit = (item: InventoryItem) => {
+    setEditingItem(item);
+    setEditForm({
+      name: item.name,
+      category: (item.category === 'Bahan Baku' ? 'Bahan Baku' : 'Bahan Operasional') as InventoryItem['category'],
+      unit: item.unit,
+      minStock: item.minStock || 0,
+      supplierId: item.supplierId || '',
+      supplierName: item.supplierName || '',
+      warehouseLocation: item.warehouseLocation || '',
+      description: item.description || '',
+    });
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem || !editForm.name.trim()) return;
+
+    updateInventoryItem(editingItem.id, {
+      name: editForm.name.trim(),
+      category: editForm.category,
+      unit: editForm.unit,
+      minStock: Number(editForm.minStock || 0),
+      supplierId: editForm.supplierId,
+      supplierName: editForm.supplierName.trim(),
+      warehouseLocation: editForm.warehouseLocation,
+      description: editForm.description,
+    });
+
+    setEditingItem(null);
   };
 
   return (
@@ -192,10 +234,8 @@ export const InventoryView: React.FC = () => {
               className="text-xs p-2 border border-slate-300 rounded-lg bg-white"
             >
               <option value="Semua">Semua Kategori</option>
-              <option value="Sembako & Pangan">Sembako & Pangan</option>
-              <option value="Material Konstruksi">Material Konstruksi</option>
-              <option value="ATK & Kantor">ATK & Kantor</option>
-              <option value="Produk UMKM Anggota">Produk UMKM Anggota</option>
+              <option value="Bahan Operasional">Bahan Operasional</option>
+              <option value="Bahan Baku">Bahan Baku</option>
             </select>
           </div>
         ) : (
@@ -252,69 +292,103 @@ export const InventoryView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredItems.map((item) => {
-                  const isLow = item.currentStock <= item.minStock;
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-50/70 transition">
-                      <td className="p-3.5">
-                        <span className="font-mono text-[10px] font-bold text-red-600 block">
-                          {item.sku}
-                        </span>
-                        <span className="font-bold text-slate-900 text-xs block">
-                          {item.name}
-                        </span>
-                        <span className="text-[10px] text-slate-400 line-clamp-1">
-                          {item.description}
-                        </span>
-                      </td>
-                      <td className="p-3.5">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">
-                          {item.category}
-                        </span>
-                      </td>
-                      <td className="p-3.5">
-                        <div className="flex items-center gap-1.5">
+                {filteredItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={currentUser.role === 'admin' ? 9 : 8} className="p-8 text-center text-slate-400">
+                      Belum ada data barang inventaris. Klik &quot;Tambah Barang Baru&quot; untuk mendaftarkan barang.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredItems.map((item) => {
+                    const isLow = item.currentStock <= item.minStock;
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/70 transition">
+                        <td className="p-3.5">
+                          <span className="font-mono text-[10px] font-bold text-red-600 block">
+                            {item.sku}
+                          </span>
+                          <div className="flex items-center gap-1.5 group">
+                            <span className="font-bold text-slate-900 text-xs block">
+                              {item.name}
+                            </span>
+                            {currentUser.role === 'admin' && (
+                              <button
+                                onClick={() => handleStartEdit(item)}
+                                className="opacity-70 hover:opacity-100 text-blue-600 hover:text-blue-800 p-0.5 rounded transition cursor-pointer"
+                                title="Edit Nama Produk"
+                              >
+                                <Edit className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 line-clamp-1">
+                            {item.description}
+                          </span>
+                        </td>
+                        <td className="p-3.5">
                           <span
-                            className={`font-black text-sm ${
-                              isLow ? 'text-amber-600' : 'text-slate-900'
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                              item.category === 'Bahan Baku'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-blue-100 text-blue-800'
                             }`}
                           >
-                            {item.currentStock}
+                            {item.category}
                           </span>
-                          {isLow && (
-                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
-                              Min {item.minStock}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3.5 text-slate-600">{item.unit}</td>
-                      <td className="p-3.5 text-slate-600">{formatRupiah(item.costPrice)}</td>
-                      <td className="p-3.5 font-bold text-slate-900">
-                        {formatRupiah(item.standardPrice)}
-                      </td>
-                      <td className="p-3.5 text-slate-700 font-medium">{item.supplierName}</td>
-                      <td className="p-3.5 text-slate-500 font-mono text-[11px]">
-                        {item.warehouseLocation}
-                      </td>
-                      {currentUser.role === 'admin' && (
-                        <td className="p-3.5 text-right">
-                          <button
-                            onClick={() => {
-                              if (confirm(`Hapus barang ${item.name} dari inventaris?`)) {
-                                deleteInventoryItem(item.id);
-                              }
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
-                            title="Hapus Barang"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
                         </td>
-                      )}
-                    </tr>
-                  );
-                })}
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`font-black text-sm ${
+                                isLow ? 'text-amber-600' : 'text-slate-900'
+                              }`}
+                            >
+                              {item.currentStock}
+                            </span>
+                            {isLow && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+                                Min {item.minStock}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3.5 text-slate-600">{item.unit}</td>
+                        <td className="p-3.5 text-slate-600">{formatRupiah(item.costPrice)}</td>
+                        <td className="p-3.5 font-bold text-slate-900">
+                          {formatRupiah(item.standardPrice)}
+                        </td>
+                        <td className="p-3.5 text-slate-700 font-medium">{item.supplierName}</td>
+                        <td className="p-3.5 text-slate-500 font-mono text-[11px]">
+                          {item.warehouseLocation}
+                        </td>
+                        {currentUser.role === 'admin' && (
+                          <td className="p-3.5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => handleStartEdit(item)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
+                                title="Edit Nama Produk"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Hapus barang ${item.name} dari inventaris?`)) {
+                                    deleteInventoryItem(item.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                                title="Hapus Barang"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -339,66 +413,247 @@ export const InventoryView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredMovements.map((mov, idx) => {
-                  const isOut = mov.type === 'OUT';
-                  return (
-                    <tr key={`${mov.id}-${idx}`} className="hover:bg-slate-50/70 transition">
-                      <td className="p-3.5 font-mono text-[11px] text-slate-500">
-                        {mov.date} WIB
-                      </td>
-                      <td className="p-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold ${
-                            isOut
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}
-                        >
-                          {isOut ? (
-                            <>
-                              <ArrowUpRight className="w-3 h-3" />
-                              KELUAR (KLIEN)
-                            </>
-                          ) : (
-                            <>
-                              <ArrowDownLeft className="w-3 h-3" />
-                              MASUK (SUPPLIER)
-                            </>
-                          )}
-                        </span>
-                      </td>
-                      <td className="p-3.5">
-                        <span className="font-bold text-slate-800 block">{mov.itemName}</span>
-                        <span className="font-mono text-[10px] text-slate-400">{mov.sku}</span>
-                      </td>
-                      <td className="p-3.5">
-                        <span
-                          className={`font-black text-sm ${
-                            isOut ? 'text-blue-700' : 'text-emerald-700'
-                          }`}
-                        >
-                          {isOut ? '-' : '+'}
-                          {mov.quantity} {mov.unit}
-                        </span>
-                      </td>
-                      <td className="p-3.5 font-semibold text-slate-800">{mov.partyName}</td>
-                      <td className="p-3.5 font-mono font-bold text-red-700">
-                        {mov.referenceNo}
-                      </td>
-                      <td className="p-3.5 text-slate-600">{mov.performedBy}</td>
-                      <td className="p-3.5 text-slate-500 text-[11px] max-w-[200px]">
-                        {mov.notes}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredMovements.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-slate-400">
+                      Belum ada riwayat mutasi stok barang.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMovements.map((mov, idx) => {
+                    const isOut = mov.type === 'OUT';
+                    return (
+                      <tr key={`${mov.id}-${idx}`} className="hover:bg-slate-50/70 transition">
+                        <td className="p-3.5 font-mono text-[11px] text-slate-500">
+                          {mov.date} WIB
+                        </td>
+                        <td className="p-3.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                              isOut
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {isOut ? (
+                              <>
+                                <ArrowUpRight className="w-3 h-3" />
+                                KELUAR (KLIEN)
+                              </>
+                            ) : (
+                              <>
+                                <ArrowDownLeft className="w-3 h-3" />
+                                MASUK (SUPPLIER)
+                              </>
+                            )}
+                          </span>
+                        </td>
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-800 block">{mov.itemName}</span>
+                          <span className="font-mono text-[10px] text-slate-400">{mov.sku}</span>
+                        </td>
+                        <td className="p-3.5">
+                          <span
+                            className={`font-black text-sm ${
+                              isOut ? 'text-blue-700' : 'text-emerald-700'
+                            }`}
+                          >
+                            {isOut ? '-' : '+'}
+                            {mov.quantity} {mov.unit}
+                          </span>
+                        </td>
+                        <td className="p-3.5 font-semibold text-slate-800">{mov.partyName}</td>
+                        <td className="p-3.5 font-mono font-bold text-red-700">
+                          {mov.referenceNo}
+                        </td>
+                        <td className="p-3.5 text-slate-600">{mov.performedBy}</td>
+                        <td className="p-3.5 text-slate-500 text-[11px] max-w-[200px]">
+                          {mov.notes}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Add Item Modal */}
+      {/* Modal: Edit Nama Produk & Data Barang (Role Admin) */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-slate-200 animate-in fade-in zoom-in-95 p-6">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Edit className="w-5 h-5 text-blue-600" />
+                Edit Nama Produk & Data Barang
+              </h3>
+              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold">
+                {editingItem.sku}
+              </span>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Nama Produk / Barang <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="Contoh: Beras Premium Rojo Lele"
+                  className="w-full p-2.5 border-2 border-blue-500 rounded-lg font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  required
+                  autoFocus
+                />
+                <p className="text-[11px] text-blue-600 mt-1 font-medium">
+                  Perubahan nama produk akan langsung diperbarui di inventaris koperasi.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Kategori Produk
+                  </label>
+                  <select
+                    value={editForm.category}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        category: e.target.value as InventoryItem['category'],
+                      })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="Bahan Operasional">Bahan Operasional</option>
+                    <option value="Bahan Baku">Bahan Baku</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Satuan
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.unit}
+                    onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-lg"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Batas Minimum Stok
+                  </label>
+                  <input
+                    type="number"
+                    value={editForm.minStock}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, minStock: Number(e.target.value) })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Lokasi Rak / Gudang
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.warehouseLocation}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, warehouseLocation: e.target.value })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-slate-700">
+                  Supplier Pemasok
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <select
+                    value={editForm.supplierId}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const found = suppliers.find((s) => s.id === selectedId);
+                      if (found) {
+                        setEditForm({
+                          ...editForm,
+                          supplierId: found.id,
+                          supplierName: found.companyName || found.name,
+                        });
+                      } else {
+                        setEditForm({
+                          ...editForm,
+                          supplierId: '',
+                        });
+                      }
+                    }}
+                    className="w-full p-2 border border-slate-300 rounded-lg bg-white text-xs"
+                  >
+                    <option value="">-- Pilih dari Supplier Terdaftar --</option>
+                    {suppliers.map((sup) => (
+                      <option key={sup.id} value={sup.id}>
+                        {sup.name} {sup.companyName ? `(${sup.companyName})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={editForm.supplierName}
+                    onChange={(e) => setEditForm({ ...editForm, supplierName: e.target.value })}
+                    placeholder="Nama Supplier (Disesuaikan)"
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Deskripsi / Catatan Barang
+                </label>
+                <textarea
+                  rows={2}
+                  value={editForm.description}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, description: e.target.value })
+                  }
+                  placeholder="Spesifikasi, grade atau instruksi khusus..."
+                  className="w-full p-2 border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg cursor-pointer transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg cursor-pointer transition shadow-xs"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Pendaftaran Barang Inventaris Baru */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-slate-200 animate-in fade-in zoom-in-95 p-6">
@@ -407,7 +662,7 @@ export const InventoryView: React.FC = () => {
               Pendaftaran Barang Inventaris Baru
             </h3>
 
-            <form onSubmit={handleCreateItem} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateItem} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
@@ -417,14 +672,14 @@ export const InventoryView: React.FC = () => {
                     type="text"
                     value={newItem.sku}
                     onChange={(e) => setNewItem({ ...newItem, sku: e.target.value })}
-                    placeholder="GMP-BRS-09"
+                    placeholder="Contoh: BOP-001"
                     className="w-full p-2 border border-slate-300 rounded-lg font-mono uppercase"
                     required
                   />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Kategori
+                    Kategori Produk
                   </label>
                   <select
                     value={newItem.category}
@@ -434,12 +689,10 @@ export const InventoryView: React.FC = () => {
                         category: e.target.value as InventoryItem['category'],
                       })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg"
+                    className="w-full p-2 border border-slate-300 rounded-lg bg-white"
                   >
-                    <option value="Sembako & Pangan">Sembako & Pangan</option>
-                    <option value="Material Konstruksi">Material Konstruksi</option>
-                    <option value="ATK & Kantor">ATK & Kantor</option>
-                    <option value="Produk UMKM Anggota">Produk UMKM Anggota</option>
+                    <option value="Bahan Operasional">Bahan Operasional</option>
+                    <option value="Bahan Baku">Bahan Baku</option>
                   </select>
                 </div>
               </div>
@@ -452,8 +705,8 @@ export const InventoryView: React.FC = () => {
                   type="text"
                   value={newItem.name}
                   onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                  placeholder="Contoh: Beras Premium Pandan Wangi 25kg"
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  placeholder="Contoh: Kertas HVS A4 80gr"
+                  className="w-full p-2 border border-slate-300 rounded-lg font-semibold text-slate-900"
                   required
                 />
               </div>
@@ -467,7 +720,7 @@ export const InventoryView: React.FC = () => {
                     type="text"
                     value={newItem.unit}
                     onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
-                    placeholder="Karung / Sak / Dus"
+                    placeholder="Rim / Sak / Kg"
                     className="w-full p-2 border border-slate-300 rounded-lg"
                     required
                   />
@@ -498,62 +751,74 @@ export const InventoryView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    HPP Beli Supplier (Rp)
-                  </label>
-                  <input
-                    type="number"
-                    value={newItem.costPrice}
-                    onChange={(e) => setNewItem({ ...newItem, costPrice: Number(e.target.value) })}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Harga Standar Jual (Rp)
-                  </label>
-                  <input
-                    type="number"
-                    value={newItem.standardPrice}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, standardPrice: Number(e.target.value) })
-                    }
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    required
-                  />
+              {/* Note: 'harga standard jual' dan 'HPP dari supplier' telah dihilangkan sesuai permintaan user */}
+
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-slate-700">
+                  Supplier Pemasok
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <select
+                      value={newItem.supplierId}
+                      onChange={(e) => {
+                        const selectedId = e.target.value;
+                        const found = suppliers.find((s) => s.id === selectedId);
+                        if (found) {
+                          setNewItem({
+                            ...newItem,
+                            supplierId: found.id,
+                            supplierName: found.companyName || found.name,
+                          });
+                        } else {
+                          setNewItem({
+                            ...newItem,
+                            supplierId: '',
+                          });
+                        }
+                      }}
+                      className="w-full p-2 border border-slate-300 rounded-lg bg-white text-xs"
+                    >
+                      <option value="">-- Pilih Supplier Terdaftar --</option>
+                      {suppliers.map((sup) => (
+                        <option key={sup.id} value={sup.id}>
+                          {sup.name} {sup.companyName ? `(${sup.companyName})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      Pilih dari master supplier terdaftar
+                    </span>
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={newItem.supplierName}
+                      onChange={(e) => setNewItem({ ...newItem, supplierName: e.target.value })}
+                      placeholder="Nama Supplier Pemasok"
+                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                      required
+                    />
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      Nama pemasok (bisa disesuaikan)
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Supplier Pemasok
-                  </label>
-                  <input
-                    type="text"
-                    value={newItem.supplierName}
-                    onChange={(e) => setNewItem({ ...newItem, supplierName: e.target.value })}
-                    placeholder="CV Tani Jaya Agro Makmur"
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Lokasi Rak/Gudang
-                  </label>
-                  <input
-                    type="text"
-                    value={newItem.warehouseLocation}
-                    onChange={(e) =>
-                      setNewItem({ ...newItem, warehouseLocation: e.target.value })
-                    }
-                    placeholder="Gudang Blok B-03"
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Lokasi Rak / Gudang
+                </label>
+                <input
+                  type="text"
+                  value={newItem.warehouseLocation}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, warehouseLocation: e.target.value })
+                  }
+                  placeholder="Gudang Blok A-01"
+                  className="w-full p-2 border border-slate-300 rounded-lg"
+                />
               </div>
 
               <div>
@@ -564,7 +829,7 @@ export const InventoryView: React.FC = () => {
                   rows={2}
                   value={newItem.description}
                   onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                  placeholder="Kualitas, masa simpan, atau instruksi penyimpanan..."
+                  placeholder="Kualitas, mutu, atau catatan penyimpanan..."
                   className="w-full p-2 border border-slate-300 rounded-lg"
                 />
               </div>
@@ -573,7 +838,7 @@ export const InventoryView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer"
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg cursor-pointer transition"
                 >
                   Batal
                 </button>

@@ -41,7 +41,7 @@ export interface InventoryItem {
   id: string;
   sku: string;
   name: string;
-  category: 'Sembako & Pangan' | 'Material Konstruksi' | 'ATK & Kantor' | 'Produk UMKM Anggota' | 'Lainnya';
+  category: 'Bahan Operasional' | 'Bahan Baku';
   unit: string; // kg, sak, liter, rim, karton, dus
   currentStock: number;
   minStock: number;

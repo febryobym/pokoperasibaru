@@ -52,10 +52,13 @@ export const SupplierInboundView: React.FC = () => {
     const targetItem = inventory.find((i) => i.id === selectedItemId);
     if (!targetItem) return;
 
+    const matchedSupplier = supplierUsers.find(
+      (u) => (u.companyName || u.name) === selectedSupplier
+    );
     const totalCost = Number(quantity) * Number(customCost);
 
     createSupplierInbound({
-      supplierId: 'usr-supplier-1',
+      supplierId: matchedSupplier?.id || 'supplier-id',
       supplierName: selectedSupplier,
       supplierPhone,
       supplierEmail,
