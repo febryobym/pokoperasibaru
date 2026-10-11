@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import {
   User,
   InventoryItem,
@@ -25,7 +25,7 @@ import {
 interface AppContextType {
   // Auth
   isAuthenticated: boolean;
-  login: (username: string, password: string) => { success: boolean; message?: string };
+  login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
 
   currentUser: User;
@@ -103,39 +103,6 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEY_PREFIX = 'garuda_mp_';
 const DATA_VERSION_KEY = 'garuda_mp_clean_v3';
 
-// Clear out old sample data if not migrated
-if (typeof window !== 'undefined' && localStorage.getItem(DATA_VERSION_KEY) !== 'yes') {
-  localStorage.removeItem(`${STORAGE_KEY_PREFIX}inventory`);
-  localStorage.removeItem(`${STORAGE_KEY_PREFIX}movements`);
-  localStorage.removeItem(`${STORAGE_KEY_PREFIX}pos`);
-  localStorage.removeItem(`${STORAGE_KEY_PREFIX}inbounds`);
-  localStorage.removeItem(`${STORAGE_KEY_PREFIX}invoices`);
-  localStorage.removeItem(`${STORAGE_KEY_PREFIX}notifications`);
-
-  // Clean users to purge sample users (client1, client2, supplier1, supplier2)
-  const savedUsers = localStorage.getItem(`${STORAGE_KEY_PREFIX}users`);
-  if (savedUsers) {
-    try {
-      const parsed: User[] = JSON.parse(savedUsers);
-      const cleanUsers = parsed.filter(
-        (u) =>
-          u.id === 'usr-admin-1' ||
-          (!u.id.startsWith('usr-client') && !u.id.startsWith('usr-supplier'))
-      );
-      if (cleanUsers.length === 0) {
-        localStorage.setItem(`${STORAGE_KEY_PREFIX}users`, JSON.stringify(INITIAL_USERS));
-      } else {
-        localStorage.setItem(`${STORAGE_KEY_PREFIX}users`, JSON.stringify(cleanUsers));
-      }
-    } catch {
-      localStorage.setItem(`${STORAGE_KEY_PREFIX}users`, JSON.stringify(INITIAL_USERS));
-    }
-  } else {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}users`, JSON.stringify(INITIAL_USERS));
-  }
-  localStorage.setItem(DATA_VERSION_KEY, 'yes');
-}
-
 let globalIdCounter = 0;
 export const generateUniqueId = (prefix: string) => {
   globalIdCounter += 1;
@@ -144,26 +111,14 @@ export const generateUniqueId = (prefix: string) => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load users
+  // Load users (cached locally, synchronized with Firestore in real-time)
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}users`);
     if (saved) {
       try {
         const parsed: User[] = JSON.parse(saved);
-        const filtered = parsed.filter(
-          (u) =>
-            u.id === 'usr-admin-1' ||
-            (!u.id.startsWith('usr-client') && !u.id.startsWith('usr-supplier'))
-        );
-        if (filtered.length > 0) {
-          return filtered.map((u) => {
-            const matchInitial = INITIAL_USERS.find((init) => init.id === u.id);
-            return {
-              ...u,
-              username: u.username || matchInitial?.username || (u.role === 'admin' ? 'admin' : u.id.replace('usr-', '')),
-              password: u.password || matchInitial?.password || (u.role === 'admin' ? 'admin123' : `${u.role}123`),
-            };
-          });
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
       } catch {
         return INITIAL_USERS;
@@ -293,59 +248,144 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`${STORAGE_KEY_PREFIX}is_authenticated`, String(isAuthenticated));
   }, [isAuthenticated]);
 
-  // Firestore synchronization on mount for PuchaseOrder database
+  // 1. Users real-time sync with Cloud Firestore
   useEffect(() => {
-    let isMounted = true;
-    const samplePOIds = [
-      'po-new-diajukan',
-      'po-new-disetujui',
-      'po-new-ditolak',
-      'po-new-resmi',
-      'po-1',
-      'po-2',
-      'po-3',
-    ];
-    const syncFirestorePOs = async () => {
-      try {
-        const poColRef = collection(db, 'purchaseOrders');
-        const snapshot = await getDocs(poColRef);
+    const unsub = onSnapshot(
+      collection(db, 'users'),
+      (snapshot) => {
         if (!snapshot.empty) {
-          const remotePOs: PurchaseOrder[] = [];
-          for (const docSnap of snapshot.docs) {
-            const data = docSnap.data() as PurchaseOrder;
-            if (
-              samplePOIds.includes(docSnap.id) ||
-              samplePOIds.includes(data.id) ||
-              data.clientName?.includes('Sumber Makmur') ||
-              data.clientName?.includes('Berkah Abadi')
-            ) {
-              // Delete old sample PO from Firestore permanently
-              deleteDoc(doc(db, 'purchaseOrders', docSnap.id)).catch(() => {});
-            } else {
-              remotePOs.push(data);
-            }
+          const remoteUsers: User[] = [];
+          snapshot.docs.forEach((docSnap) => {
+            const data = docSnap.data() as User;
+            remoteUsers.push({
+              ...data,
+              id: data.id || docSnap.id,
+            });
+          });
+          const hasAdmin = remoteUsers.some((u) => u.role === 'admin' || u.id === 'usr-admin-1');
+          if (!hasAdmin) {
+            remoteUsers.unshift(INITIAL_USERS[0]);
+            setDoc(doc(db, 'users', INITIAL_USERS[0].id), INITIAL_USERS[0]).catch(console.warn);
           }
-          if (isMounted) {
-            setPurchaseOrders(remotePOs);
-          }
+          setUsers(remoteUsers);
         } else {
-          // Never seed sample data!
-          if (isMounted) {
-            setPurchaseOrders([]);
-          }
+          // If Firestore users collection is completely empty, seed default admin
+          setDoc(doc(db, 'users', INITIAL_USERS[0].id), INITIAL_USERS[0]).catch(console.warn);
+          setUsers(INITIAL_USERS);
         }
-      } catch (err) {
-        console.warn('Firestore sync notice:', err);
+      },
+      (error) => {
+        console.warn('Firestore users sync notice:', error);
       }
-    };
-    syncFirestorePOs();
-    return () => {
-      isMounted = false;
-    };
+    );
+    return () => unsub();
   }, []);
 
+  // 2. Inventory real-time sync with Cloud Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, 'inventory'),
+      (snapshot) => {
+        const remoteItems: InventoryItem[] = [];
+        snapshot.docs.forEach((docSnap) => {
+          remoteItems.push(docSnap.data() as InventoryItem);
+        });
+        setInventory(remoteItems);
+      },
+      (error) => {
+        console.warn('Firestore inventory sync notice:', error);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // 3. Purchase Orders real-time sync with Cloud Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, 'purchaseOrders'),
+      (snapshot) => {
+        const remotePOs: PurchaseOrder[] = [];
+        snapshot.docs.forEach((docSnap) => {
+          remotePOs.push(docSnap.data() as PurchaseOrder);
+        });
+        setPurchaseOrders(remotePOs);
+      },
+      (error) => {
+        console.warn('Firestore purchaseOrders sync notice:', error);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // 4. Invoices real-time sync with Cloud Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, 'invoices'),
+      (snapshot) => {
+        const remoteInvoices: Invoice[] = [];
+        snapshot.docs.forEach((docSnap) => {
+          remoteInvoices.push(docSnap.data() as Invoice);
+        });
+        setInvoices(remoteInvoices);
+      },
+      (error) => {
+        console.warn('Firestore invoices sync notice:', error);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // 5. Supplier Inbounds real-time sync with Cloud Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, 'supplierInbounds'),
+      (snapshot) => {
+        const remoteInbounds: SupplierInbound[] = [];
+        snapshot.docs.forEach((docSnap) => {
+          remoteInbounds.push(docSnap.data() as SupplierInbound);
+        });
+        setSupplierInbounds(remoteInbounds);
+      },
+      (error) => {
+        console.warn('Firestore supplierInbounds sync notice:', error);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // 6. Stock Movements real-time sync with Cloud Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, 'stockMovements'),
+      (snapshot) => {
+        const remoteMovements: StockMovement[] = [];
+        snapshot.docs.forEach((docSnap) => {
+          remoteMovements.push(docSnap.data() as StockMovement);
+        });
+        setStockMovements(remoteMovements);
+      },
+      (error) => {
+        console.warn('Firestore stockMovements sync notice:', error);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // Keep currentUser in sync if updated in users collection
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      const match = users.find((u) => u.id === currentUser.id);
+      if (match && (match.name !== currentUser.name || match.role !== currentUser.role || match.companyName !== currentUser.companyName)) {
+        setCurrentUser(match);
+      }
+    }
+  }, [users, isAuthenticated, currentUser]);
+
   // Helpers & Authentication
-  const login = (usernameInput: string, passwordInput: string): { success: boolean; message?: string } => {
+  const login = async (
+    usernameInput: string,
+    passwordInput: string
+  ): Promise<{ success: boolean; message?: string }> => {
     const trimmedUser = usernameInput.trim().toLowerCase();
     const trimmedPass = passwordInput.trim();
 
@@ -353,7 +393,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Username dan kata sandi (password) wajib diisi.' };
     }
 
-    const matchedUser = users.find((u) => {
+    // 1. Check in-memory users state first
+    let matchedUser = users.find((u) => {
       const uName = (u.username || '').toLowerCase();
       const uEmail = (u.email || '').toLowerCase();
       const uEmailPrefix = uEmail.split('@')[0];
@@ -363,17 +404,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (trimmedUser === 'client' && u.role === 'client') return true;
       if (trimmedUser === 'supplier' && u.role === 'supplier') return true;
       if (uEmailPrefix === trimmedUser) return true;
+      if (u.id.toLowerCase() === trimmedUser) return true;
       return false;
     });
+
+    // 2. If not found in memory (e.g. brand new browser before initial snapshot arrives),
+    // fetch directly from Cloud Firestore users collection
+    if (!matchedUser) {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        if (!snapshot.empty) {
+          const freshUsers: User[] = [];
+          snapshot.docs.forEach((docSnap) => {
+            const data = docSnap.data() as User;
+            freshUsers.push({ ...data, id: data.id || docSnap.id });
+          });
+          setUsers(freshUsers);
+          matchedUser = freshUsers.find((u) => {
+            const uName = (u.username || '').toLowerCase();
+            const uEmail = (u.email || '').toLowerCase();
+            const uEmailPrefix = uEmail.split('@')[0];
+
+            if (uName === trimmedUser) return true;
+            if (trimmedUser === 'admin' && u.role === 'admin') return true;
+            if (trimmedUser === 'client' && u.role === 'client') return true;
+            if (trimmedUser === 'supplier' && u.role === 'supplier') return true;
+            if (uEmailPrefix === trimmedUser) return true;
+            if (u.id.toLowerCase() === trimmedUser) return true;
+            return false;
+          });
+        }
+      } catch (err) {
+        console.warn('Direct Firestore fetch during login notice:', err);
+      }
+    }
+
+    // 3. Fallback for default admin if Firestore was fresh
+    if (!matchedUser && trimmedUser === 'admin') {
+      matchedUser = INITIAL_USERS[0];
+      setDoc(doc(db, 'users', matchedUser.id), matchedUser).catch(console.warn);
+    }
 
     if (!matchedUser) {
       return {
         success: false,
-        message: 'Username tidak terdaftar. Masukkan username akun yang telah ditentukan (contoh: admin, client1, supplier1).',
+        message: 'Username tidak ditemukan di database cloud. Pastikan Anda memasukkan username yang sesuai.',
       };
     }
 
-    const expectedPassword = matchedUser.password || (matchedUser.role === 'admin' ? 'admin123' : `${matchedUser.role}123`);
+    if (matchedUser.status === 'inactive') {
+      return {
+        success: false,
+        message: 'Akun Anda dinonaktifkan oleh Administrator. Hubungi pengurus koperasi.',
+      };
+    }
+
+    const expectedPassword =
+      matchedUser.password ||
+      (matchedUser.role === 'admin' ? 'admin123' : `${matchedUser.role}123`);
+
     if (trimmedPass !== expectedPassword) {
       return {
         success: false,
@@ -406,6 +495,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       joinedDate: userData.joinedDate || new Date().toISOString().split('T')[0],
     };
     setUsers((prev) => [newUser, ...prev]);
+    // Save to Cloud Firestore
+    setDoc(doc(db, 'users', newUser.id), newUser).catch((err) =>
+      console.warn('Firestore write user error:', err)
+    );
     if (switchActive) {
       setCurrentUser(newUser);
     }
@@ -424,6 +517,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return u;
       })
+    );
+    // Sync to Cloud Firestore
+    setDoc(doc(db, 'users', id), updates, { merge: true }).catch((err) =>
+      console.warn('Firestore update user error:', err)
     );
   };
 
@@ -447,6 +544,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setUsers((prev) => prev.filter((u) => u.id !== id));
+    deleteDoc(doc(db, 'users', id)).catch((err) =>
+      console.warn('Firestore delete user error:', err)
+    );
     return {
       success: true,
       message: `Pengguna ${target.name} (${target.role}) berhasil dihapus dari sistem.`,
@@ -485,6 +585,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setInventory((prev) => [newItem, ...prev]);
 
+    // Save to Cloud Firestore
+    setDoc(doc(db, 'inventory', newItem.id), newItem).catch((err) =>
+      console.warn('Firestore write inventory error:', err)
+    );
+
     // Record initial movement if stock > 0
     if (newItem.currentStock > 0) {
       recordStockMovement({
@@ -503,17 +608,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateInventoryItem = (id: string, updates: Partial<InventoryItem>) => {
+    const updatedAt = new Date().toISOString().split('T')[0];
     setInventory((prev) =>
       prev.map((item) =>
         item.id === id
-          ? { ...item, ...updates, updatedAt: new Date().toISOString().split('T')[0] }
+          ? { ...item, ...updates, updatedAt }
           : item
       )
+    );
+    // Sync to Cloud Firestore
+    setDoc(doc(db, 'inventory', id), { ...updates, updatedAt }, { merge: true }).catch((err) =>
+      console.warn('Firestore update inventory error:', err)
     );
   };
 
   const deleteInventoryItem = (id: string) => {
     setInventory((prev) => prev.filter((item) => item.id !== id));
+    deleteDoc(doc(db, 'inventory', id)).catch((err) =>
+      console.warn('Firestore delete inventory error:', err)
+    );
   };
 
   const recordStockMovement = (movement: Omit<StockMovement, 'id' | 'date'>) => {
@@ -523,6 +636,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       date: new Date().toISOString().replace('T', ' ').substring(0, 16),
     };
     setStockMovements((prev) => [newMov, ...prev]);
+    // Save to Cloud Firestore
+    setDoc(doc(db, 'stockMovements', newMov.id), newMov).catch((err) =>
+      console.warn('Firestore write stockMovement error:', err)
+    );
   };
 
   // PO actions
@@ -603,6 +720,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Save to Firestore
     setDoc(doc(db, 'purchaseOrders', newPO.id), newPO).catch((err) =>
       console.warn('Firestore write error (create PO):', err)
+    );
+    setDoc(doc(db, 'invoices', newInvoice.id), newInvoice).catch((err) =>
+      console.warn('Firestore write error (create invoice):', err)
     );
 
     // Send dual automated notifications: to Admin & Client
@@ -1080,6 +1200,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSupplierInbounds((prev) => [newInbound, ...prev]);
     setInvoices((prev) => [newInvoice, ...prev]);
 
+    // Save to Cloud Firestore
+    setDoc(doc(db, 'supplierInbounds', newInbound.id), newInbound).catch((err) =>
+      console.warn('Firestore write error (create inbound):', err)
+    );
+    setDoc(doc(db, 'invoices', newInvoice.id), newInvoice).catch((err) =>
+      console.warn('Firestore write error (create supplier invoice):', err)
+    );
+
     triggerDualNotification(
       inboundData.supplierName,
       inboundData.supplierPhone,
@@ -1100,16 +1228,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 1. Update inventory stocks
     inbound.items.forEach((item) => {
+      let updatedStock = 0;
       setInventory((prev) =>
-        prev.map((inv) =>
-          inv.id === item.itemId
-            ? { ...inv, currentStock: inv.currentStock + item.quantity }
-            : inv
-        )
+        prev.map((inv) => {
+          if (inv.id === item.itemId) {
+            updatedStock = inv.currentStock + item.quantity;
+            return { ...inv, currentStock: updatedStock };
+          }
+          return inv;
+        })
       );
 
+      // Save updated stock to Firestore
+      const targetItem = inventory.find((i) => i.id === item.itemId);
+      const newStockVal = (targetItem ? targetItem.currentStock : 0) + item.quantity;
+      setDoc(
+        doc(db, 'inventory', item.itemId),
+        { currentStock: newStockVal, updatedAt: nowStrMov.split(' ')[0] },
+        { merge: true }
+      ).catch(console.warn);
+
       // Record stock movement IN
-      newMovements.push({
+      const movementObj: StockMovement = {
         id: generateUniqueId('mov'),
         date: nowStrMov,
         itemId: item.itemId,
@@ -1122,7 +1262,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         partyName: inbound.supplierName,
         performedBy: currentUser.name,
         notes: `Penerimaan barang dari supplier ${inbound.supplierName}. Verifikasi kondisi baik.`,
-      });
+      };
+      newMovements.push(movementObj);
+      setDoc(doc(db, 'stockMovements', movementObj.id), movementObj).catch(console.warn);
     });
 
     if (newMovements.length > 0) {
@@ -1133,6 +1275,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSupplierInbounds((prev) =>
       prev.map((i) => (i.id === inboundId ? { ...i, status: 'SELESAI' } : i))
     );
+    setDoc(doc(db, 'supplierInbounds', inboundId), { status: 'SELESAI' }, { merge: true }).catch(console.warn);
 
     // Notification to supplier
     triggerDualNotification(
@@ -1170,6 +1313,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return updated;
       })
     );
+    setDoc(doc(db, 'supplierInbounds', id), updates, { merge: true }).catch(console.warn);
   };
 
   const deleteSupplierInbound = (inboundId: string): { success: boolean; message: string } => {
@@ -1196,6 +1340,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const inv = invoices.find((i) => i.id === invoiceId);
     if (!inv) return;
 
+    const paymentDateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
     setInvoices((prev) =>
       prev.map((i) =>
         i.id === invoiceId
@@ -1204,17 +1350,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               status: 'MENUNGGU_KONFIRMASI',
               paymentProof: proofUrl,
               paymentMethod,
-              paymentDate: new Date().toISOString().replace('T', ' ').substring(0, 16),
+              paymentDate: paymentDateStr,
             }
           : i
       )
     );
+    setDoc(
+      doc(db, 'invoices', invoiceId),
+      {
+        status: 'MENUNGGU_KONFIRMASI',
+        paymentProof: proofUrl,
+        paymentMethod,
+        paymentDate: paymentDateStr,
+      },
+      { merge: true }
+    ).catch(console.warn);
 
     // Update PO payment status
     setPurchaseOrders((prev) =>
-      prev.map((po) =>
-        po.invoiceId === invoiceId ? { ...po, paymentStatus: 'MENUNGGU_KONFIRMASI' } : po
-      )
+      prev.map((po) => {
+        if (po.invoiceId === invoiceId) {
+          setDoc(doc(db, 'purchaseOrders', po.id), { paymentStatus: 'MENUNGGU_KONFIRMASI' }, { merge: true }).catch(console.warn);
+          return { ...po, paymentStatus: 'MENUNGGU_KONFIRMASI' };
+        }
+        return po;
+      })
     );
 
     // Alert koperasi admin
@@ -1233,6 +1393,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const inv = invoices.find((i) => i.id === invoiceId);
     if (!inv) return;
 
+    const paymentDateStr = inv.paymentDate || new Date().toISOString().replace('T', ' ').substring(0, 16);
+
     setInvoices((prev) =>
       prev.map((i) =>
         i.id === invoiceId
@@ -1240,17 +1402,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...i,
               status: 'LUNAS',
               paidAmount: i.totalAmount,
-              paymentDate: i.paymentDate || new Date().toISOString().replace('T', ' ').substring(0, 16),
+              paymentDate: paymentDateStr,
             }
           : i
       )
     );
+    setDoc(
+      doc(db, 'invoices', invoiceId),
+      {
+        status: 'LUNAS',
+        paidAmount: inv.totalAmount,
+        paymentDate: paymentDateStr,
+      },
+      { merge: true }
+    ).catch(console.warn);
 
     // Update PO payment status
     setPurchaseOrders((prev) =>
-      prev.map((po) =>
-        po.invoiceId === invoiceId ? { ...po, paymentStatus: 'LUNAS' } : po
-      )
+      prev.map((po) => {
+        if (po.invoiceId === invoiceId) {
+          setDoc(doc(db, 'purchaseOrders', po.id), { paymentStatus: 'LUNAS' }, { merge: true }).catch(console.warn);
+          return { ...po, paymentStatus: 'LUNAS' };
+        }
+        return po;
+      })
     );
 
     triggerDualNotification(
@@ -1268,6 +1443,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const inv = invoices.find((i) => i.id === invoiceId);
     if (!inv) return;
 
+    const paymentDateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
     setInvoices((prev) =>
       prev.map((i) =>
         i.id === invoiceId
@@ -1276,17 +1453,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               status: 'LUNAS',
               paidAmount: i.totalAmount,
               paymentMethod,
-              paymentDate: new Date().toISOString().replace('T', ' ').substring(0, 16),
+              paymentDate: paymentDateStr,
             }
           : i
       )
     );
+    setDoc(
+      doc(db, 'invoices', invoiceId),
+      {
+        status: 'LUNAS',
+        paidAmount: inv.totalAmount,
+        paymentMethod,
+        paymentDate: paymentDateStr,
+      },
+      { merge: true }
+    ).catch(console.warn);
 
     // Update supplier inbound status
     setSupplierInbounds((prev) =>
-      prev.map((s) =>
-        s.invoiceNumber === inv.invoiceNumber ? { ...s, paymentStatus: 'LUNAS' } : s
-      )
+      prev.map((s) => {
+        if (s.invoiceNumber === inv.invoiceNumber) {
+          setDoc(doc(db, 'supplierInbounds', s.id), { paymentStatus: 'LUNAS' }, { merge: true }).catch(console.warn);
+          return { ...s, paymentStatus: 'LUNAS' };
+        }
+        return s;
+      })
     );
 
     triggerDualNotification(

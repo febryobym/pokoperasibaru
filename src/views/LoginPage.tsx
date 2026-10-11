@@ -38,7 +38,7 @@ export const LoginPage: React.FC = () => {
     setErrorMessage(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -49,14 +49,16 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
 
-    // Simulate brief authentication check
-    setTimeout(() => {
-      const result = login(username, password);
+    try {
+      const result = await login(username, password);
       setIsLoading(false);
       if (!result.success) {
         setErrorMessage(result.message || 'Username atau kata sandi tidak valid.');
       }
-    }, 300);
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMessage('Terjadi kendala saat menghubungkan ke database cloud: ' + (err?.message || 'Error'));
+    }
   };
 
   return (
