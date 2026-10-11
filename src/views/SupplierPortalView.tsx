@@ -14,21 +14,34 @@ import {
   Send,
   Boxes,
   Layers,
+  ShoppingCart,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Building,
+  Check,
+  ShieldCheck,
+  Info,
+  MapPin,
+  Phone,
+  User,
 } from 'lucide-react';
-import { InventoryItem } from '../types';
+import { InventoryItem, PurchaseOrder, POItem } from '../types';
 
 interface SupplierPortalViewProps {
-  initialSubTab?: 'deliveries' | 'invoices' | 'products';
+  initialSubTab?: 'orders' | 'deliveries' | 'invoices' | 'products';
 }
 
 export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
-  initialSubTab = 'deliveries',
+  initialSubTab = 'orders',
 }) => {
   const {
     currentUser,
     supplierInbounds,
     invoices,
     inventory,
+    purchaseOrders,
+    updatePurchaseOrder,
     addInventoryItem,
     updateInventoryItem,
     deleteInventoryItem,
@@ -36,7 +49,9 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
     openInvoiceModal,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'deliveries' | 'invoices' | 'products'>(initialSubTab);
+  const [activeTab, setActiveTab] = useState<'orders' | 'deliveries' | 'invoices' | 'products'>(
+    initialSubTab
+  );
 
   useEffect(() => {
     if (initialSubTab) {
@@ -80,8 +95,157 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
     description: '',
   });
 
+  // =========================================================================
+  // Incoming Client POs & HPP Input States
+  // =========================================================================
+  const [selectedPOForHPP, setSelectedPOForHPP] = useState<PurchaseOrder | null>(null);
+  const [hppInputs, setHppInputs] = useState<{ [itemId: string]: number | '' }>({});
+  const [supplierOrderNotes, setSupplierOrderNotes] = useState('');
+  const [orderFilter, setOrderFilter] = useState<'ALL' | 'NEED_HPP' | 'ACCEPTED'>('ALL');
+
   const formatRupiah = (num: number) => {
     return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
+  };
+
+  const supplierIdentifier = currentUser.companyName || currentUser.name;
+
+  // Helper: check if a POItem is supplied by current supplier
+  const isItemForCurrentSupplier = (item: POItem) => {
+    const sName = item.supplierName?.toLowerCase().trim();
+    const myComp = (currentUser.companyName || '').toLowerCase().trim();
+    const myName = currentUser.name.toLowerCase().trim();
+
+    if (sName && (sName === myComp || sName === myName)) {
+      return true;
+    }
+
+    // Match by item in inventory
+    const matchingInv = inventory.find((inv) => inv.id === item.itemId);
+    if (matchingInv) {
+      if (matchingInv.supplierId === currentUser.id) return true;
+      const invSupp = matchingInv.supplierName?.toLowerCase().trim();
+      if (invSupp && (invSupp === myComp || invSupp === myName)) return true;
+    }
+
+    return false;
+  };
+
+  // Filter POs containing items from this supplier
+  const myIncomingPOs = purchaseOrders.filter((po) =>
+    po.items.some(isItemForCurrentSupplier)
+  );
+
+  // Count orders that need HPP
+  const pendingHPPOrdersCount = myIncomingPOs.filter((po) =>
+    po.items.some(
+      (it) =>
+        isItemForCurrentSupplier(it) &&
+        (!it.costPrice || it.costPrice === 0) &&
+        (!it.supplierCostPrice || it.supplierCostPrice === 0)
+    )
+  ).length;
+
+  // Filtered incoming POs for tab
+  const filteredIncomingPOs = myIncomingPOs.filter((po) => {
+    if (orderFilter === 'ALL') return true;
+    const hasPendingHPP = po.items.some(
+      (it) =>
+        isItemForCurrentSupplier(it) &&
+        (!it.costPrice || it.costPrice === 0) &&
+        (!it.supplierCostPrice || it.supplierCostPrice === 0)
+    );
+    if (orderFilter === 'NEED_HPP') return hasPendingHPP;
+    if (orderFilter === 'ACCEPTED') return !hasPendingHPP;
+    return true;
+  });
+
+  // Open modal to accept order and input HPP
+  const handleOpenHPPModal = (po: PurchaseOrder) => {
+    setSelectedPOForHPP(po);
+    const initialInputs: { [itemId: string]: number | '' } = {};
+    po.items.filter(isItemForCurrentSupplier).forEach((it) => {
+      const matchingInv = inventory.find((i) => i.id === it.itemId);
+      const existingHpp =
+        it.costPrice || it.supplierCostPrice || matchingInv?.costPrice || '';
+      initialInputs[it.itemId] = existingHpp;
+    });
+    setHppInputs(initialInputs);
+    setSupplierOrderNotes(
+      po.supplierNotes ||
+        'Pesanan telah kami terima. Kuantitas dan spesifikasi barang siap dipenuhi sesuai jadwal.'
+    );
+  };
+
+  // Submit HPP and save to Admin's product database
+  const handleSaveHPP = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPOForHPP) return;
+
+    const supplierItems = selectedPOForHPP.items.filter(isItemForCurrentSupplier);
+
+    // Validate that HPP is filled for all items
+    for (const it of supplierItems) {
+      const entered = hppInputs[it.itemId];
+      if (entered === '' || Number(entered) <= 0) {
+        alert(`Mohon masukkan harga HPP yang valid untuk produk "${it.itemName}".`);
+        return;
+      }
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // 1. Update Database Produk di Role Admin (inventory)
+    // "nomor ID produk yang sama dengan supplier, harga HPP dan semua informasi produk akan tersimpan di database produk role 'admin'"
+    supplierItems.forEach((it) => {
+      const enteredHPP = Number(hppInputs[it.itemId]);
+      updateInventoryItem(it.itemId, {
+        costPrice: enteredHPP, // HPP tersimpan di master database produk role Admin!
+        supplierId: currentUser.id,
+        supplierName: currentUser.companyName || currentUser.name,
+      });
+    });
+
+    // 2. Update Purchase Order items & status
+    const updatedItems = selectedPOForHPP.items.map((it) => {
+      if (isItemForCurrentSupplier(it)) {
+        const enteredHPP = Number(hppInputs[it.itemId]);
+        return {
+          ...it,
+          costPrice: enteredHPP,
+          supplierCostPrice: enteredHPP,
+          supplierStatus: 'DITERIMA' as const,
+        };
+      }
+      return it;
+    });
+
+    const updatedTimeline = [...selectedPOForHPP.timeline];
+    const existingStepIdx = updatedTimeline.findIndex((s) => s.id === 'step-supplier-hpp');
+    const stepData = {
+      id: 'step-supplier-hpp',
+      title: `Pesanan Diterima oleh Supplier (${currentUser.companyName || currentUser.name})`,
+      description: `Supplier telah mengonfirmasi penerimaan pesanan dan menetapkan harga HPP resmi produk ke database.`,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      status: 'completed' as const,
+    };
+
+    if (existingStepIdx >= 0) {
+      updatedTimeline[existingStepIdx] = stepData;
+    } else {
+      updatedTimeline.push(stepData);
+    }
+
+    updatePurchaseOrder(selectedPOForHPP.id, {
+      items: updatedItems,
+      timeline: updatedTimeline,
+      supplierNotes: supplierOrderNotes,
+      status: selectedPOForHPP.status === 'DIAJUKAN' ? 'DIPROSES' : selectedPOForHPP.status,
+    });
+
+    alert(
+      `Pesanan ${selectedPOForHPP.poNumber} berhasil diterima!\n\nHarga HPP dan seluruh informasi produk telah berhasil tersimpan ke database produk role Admin dengan Nomor ID Produk yang sama.`
+    );
+    setSelectedPOForHPP(null);
   };
 
   // Supplier's deliveries
@@ -162,15 +326,15 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
       sku: genSku.toUpperCase(),
       name: newProduct.name.trim(),
       category: newProduct.category,
-      unit: newProduct.unit.trim() || 'Unit',
+      unit: newProduct.unit.trim() || 'Kg',
       currentStock: Number(newProduct.availableStock || 0),
       minStock: 10,
       costPrice: Number(newProduct.costPrice || 0),
-      standardPrice: 0,
+      standardPrice: Math.round(Number(newProduct.costPrice || 0) * 1.15),
       supplierId: currentUser.id,
       supplierName: currentUser.companyName || currentUser.name,
-      warehouseLocation: newProduct.warehouseLocation.trim() || 'Gudang Sentra Pemasok',
-      description: newProduct.description.trim(),
+      warehouseLocation: newProduct.warehouseLocation.trim() || 'Gudang Mitra Supplier',
+      description: newProduct.description.trim() || 'Barang pasokan resmi dari mitra supplier terdaftar.',
     });
 
     setShowAddProductModal(false);
@@ -190,25 +354,25 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
     setEditingProduct(item);
     setEditProductForm({
       name: item.name,
-      category: (item.category === 'Bahan Operasional' ? 'Bahan Operasional' : 'Bahan Baku') as InventoryItem['category'],
+      category: item.category,
       unit: item.unit,
-      costPrice: item.costPrice || 0,
-      availableStock: item.currentStock || 0,
-      warehouseLocation: item.warehouseLocation || '',
-      description: item.description || '',
+      costPrice: item.costPrice,
+      availableStock: item.currentStock,
+      warehouseLocation: item.warehouseLocation,
+      description: item.description,
     });
   };
 
   const handleSaveEditProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingProduct || !editProductForm.name.trim()) return;
+    if (!editingProduct) return;
 
     updateInventoryItem(editingProduct.id, {
       name: editProductForm.name.trim(),
       category: editProductForm.category,
-      unit: editProductForm.unit.trim() || 'Unit',
-      currentStock: Number(editProductForm.availableStock || 0),
-      costPrice: Number(editProductForm.costPrice || 0),
+      unit: editProductForm.unit.trim(),
+      costPrice: Number(editProductForm.costPrice),
+      currentStock: Number(editProductForm.availableStock),
       warehouseLocation: editProductForm.warehouseLocation.trim(),
       description: editProductForm.description.trim(),
     });
@@ -217,35 +381,30 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
   };
 
   const handleDeleteProduct = (item: InventoryItem) => {
-    if (
-      window.confirm(
-        `Apakah Anda yakin ingin menghapus produk "${item.name}" (${item.sku}) dari database produk yang Anda jual?`
-      )
-    ) {
+    if (confirm(`Apakah Anda yakin ingin menghapus produk "${item.name}" dari katalog Anda?`)) {
       deleteInventoryItem(item.id);
     }
-  };
-
-  const handleQuickSend = (item: InventoryItem) => {
-    setSelectedItemId(item.id);
-    setCostPrice(item.costPrice || 0);
-    setShowSendModal(true);
   };
 
   return (
     <div className="space-y-6">
       {/* Header Profile for Supplier */}
-      <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white rounded-2xl p-6 sm:p-7 shadow-lg shadow-emerald-900/10">
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white rounded-2xl p-6 sm:p-7 shadow-lg shadow-emerald-950/10">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-emerald-100">
-              PORTAL PEMASOK / SUPPLIER TETAP
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-emerald-100">
+                PORTAL PEMASOK / SUPPLIER TETAP
+              </span>
+              <span className="text-[10px] bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 px-2 py-0.5 rounded-full font-semibold">
+                Koperasi Garuda Merah Putih
+              </span>
+            </div>
             <h1 className="text-xl sm:text-2xl font-black mt-2 tracking-tight">
               {currentUser.companyName || currentUser.name}
             </h1>
             <p className="text-xs text-emerald-100 mt-0.5">
-              Mitra Pemasok Koperasi Garuda Merah Putih | Telp: {currentUser.phone}
+              Mitra Pemasok Koperasi | Kontak: {currentUser.phone} • Email: {currentUser.email}
             </p>
           </div>
 
@@ -269,19 +428,29 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
       </div>
 
       {/* Tabs Bar */}
-      <div className="flex border-b border-slate-200 overflow-x-auto">
+      <div className="flex border-b border-slate-200 overflow-x-auto gap-2">
+        {/* TAB 1: Incoming Orders from Clients */}
         <button
-          onClick={() => setActiveTab('deliveries')}
+          onClick={() => setActiveTab('orders')}
           className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer whitespace-nowrap ${
-            activeTab === 'deliveries'
+            activeTab === 'orders'
               ? 'border-emerald-600 text-emerald-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Truck className="w-4 h-4" />
-          <span>Pengiriman & Status Masuk Gudang ({myInbounds.length})</span>
+          <ShoppingCart className="w-4 h-4" />
+          <span>Pesanan Masuk dari Klien (PO)</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold">
+            {myIncomingPOs.length}
+          </span>
+          {pendingHPPOrdersCount > 0 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold border border-amber-300 animate-pulse">
+              {pendingHPPOrdersCount} Perlu HPP
+            </span>
+          )}
         </button>
 
+        {/* TAB 2: Products Database */}
         <button
           onClick={() => setActiveTab('products')}
           className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer whitespace-nowrap ${
@@ -294,6 +463,20 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
           <span>Database Produk & Item Dijual ({myProducts.length})</span>
         </button>
 
+        {/* TAB 3: Inbound Deliveries */}
+        <button
+          onClick={() => setActiveTab('deliveries')}
+          className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeTab === 'deliveries'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          <span>Pengiriman & Status Masuk Gudang ({myInbounds.length})</span>
+        </button>
+
+        {/* TAB 4: Invoices & Payments */}
         <button
           onClick={() => setActiveTab('invoices')}
           className={`pb-3 px-4 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer whitespace-nowrap ${
@@ -307,7 +490,444 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
         </button>
       </div>
 
-      {/* TAB 1: Deliveries Tab */}
+      {/* ========================================================================= */}
+      {/* TAB: INCOMING POs FROM CLIENTS (PESANAN MASUK DARI KLIEN) */}
+      {/* ========================================================================= */}
+      {activeTab === 'orders' && (
+        <div className="space-y-5">
+          {/* Information & Monitoring Banner */}
+          <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-emerald-600 text-white rounded-xl shrink-0 mt-0.5">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-slate-900">
+                  Monitoring & Konfirmasi Pesanan Masuk (PO Klien)
+                </h4>
+                <p className="text-slate-600 text-xs mt-0.5 leading-relaxed">
+                  Pesanan Purchase Order dari Klien yang ditujukan untuk produk Anda. Setelah menerima pesanan, masukkan <strong>Harga HPP (Modal)</strong> untuk masing-masing barang. Nomor ID produk yang sama dan seluruh informasi produk serta HPP akan otomatis tersimpan ke <strong>database produk role Admin</strong>.
+                </p>
+              </div>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+              <button
+                onClick={() => setOrderFilter('ALL')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  orderFilter === 'ALL'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Semua ({myIncomingPOs.length})
+              </button>
+              <button
+                onClick={() => setOrderFilter('NEED_HPP')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  orderFilter === 'NEED_HPP'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Perlu HPP ({pendingHPPOrdersCount})
+              </button>
+              <button
+                onClick={() => setOrderFilter('ACCEPTED')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  orderFilter === 'ACCEPTED'
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                HPP Tersimpan ({myIncomingPOs.length - pendingHPPOrdersCount})
+              </button>
+            </div>
+          </div>
+
+          {filteredIncomingPOs.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+              <ShoppingCart className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-slate-700">Belum Ada Pesanan Masuk dari Klien</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                Saat klien membuat Purchase Order (PO) yang memuat produk pasokan Anda, pesanan tersebut akan langsung muncul di sini untuk dikonfirmasi dan dimasukkan harga HPP-nya.
+              </p>
+            </div>
+          ) : (
+            filteredIncomingPOs.map((po) => {
+              const supplierItems = po.items.filter(isItemForCurrentSupplier);
+              const hasUnsetHpp = supplierItems.some(
+                (it) => (!it.costPrice || it.costPrice === 0) && (!it.supplierCostPrice || it.supplierCostPrice === 0)
+              );
+
+              return (
+                <div
+                  key={po.id}
+                  className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden transition hover:shadow-md space-y-4"
+                >
+                  {/* Card Header */}
+                  <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50/70">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono font-black text-sm text-slate-900">
+                          {po.poNumber}
+                        </span>
+                        {hasUnsetHpp ? (
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-700" />
+                            <span>Perlu Masukkan HPP</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                            <span>Diterima • HPP Tersimpan di DB Admin</span>
+                          </span>
+                        )}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono">
+                          Status PO: {po.status}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-1.5">
+                        <span className="flex items-center gap-1 font-semibold text-slate-700">
+                          <User className="w-3.5 h-3.5 text-blue-600" />
+                          Klien: {po.clientName}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          Tgl PO: {po.orderDate}
+                        </span>
+                        <span className="flex items-center gap-1 font-semibold text-slate-800">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          Target Kirim: {po.requiredDate}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleOpenHPPModal(po)}
+                      className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs self-start sm:self-auto ${
+                        hasUnsetHpp
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span>
+                        {hasUnsetHpp ? 'Terima Pesanan & Masukkan HPP' : 'Perbarui Harga HPP'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Card Content: Items Table */}
+                  <div className="px-5 pb-5 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">
+                        Rincian Produk Dipesan dari {currentUser.companyName || currentUser.name}:
+                      </span>
+                      <span className="text-slate-500 text-[11px]">
+                        Alamat Pengiriman: <strong className="text-slate-800">{po.deliveryAddress}</strong>
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
+                          <tr>
+                            <th className="p-3">Nomor ID Produk (Sama dengan Admin)</th>
+                            <th className="p-3">Nama Produk & SKU</th>
+                            <th className="p-3">Kategori</th>
+                            <th className="p-3 text-center">Kuantitas Pesanan</th>
+                            <th className="p-3">Harga Ditawar Klien</th>
+                            <th className="p-3 bg-emerald-50 text-emerald-950 font-black">
+                              Harga HPP dari Supplier
+                            </th>
+                            <th className="p-3 text-right">Subtotal HPP Supplier</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {supplierItems.map((item, idx) => {
+                            const effectiveHpp = item.costPrice || item.supplierCostPrice || 0;
+                            const lineTotalHpp = effectiveHpp * item.quantity;
+
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50/70 transition">
+                                {/* Product ID */}
+                                <td className="p-3">
+                                  <span className="font-mono font-bold text-xs text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 block max-w-fit">
+                                    {item.itemId}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 block mt-0.5">
+                                    ID Database Admin
+                                  </span>
+                                </td>
+
+                                {/* Product Name & SKU */}
+                                <td className="p-3">
+                                  <span className="font-bold text-slate-900 block">{item.itemName}</span>
+                                  <span className="text-[10px] font-mono text-slate-500">{item.sku}</span>
+                                </td>
+
+                                {/* Category */}
+                                <td className="p-3">
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      item.category === 'Bahan Baku'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-blue-100 text-blue-800'
+                                    }`}
+                                  >
+                                    {item.category || 'Bahan Baku'}
+                                  </span>
+                                </td>
+
+                                {/* Quantity */}
+                                <td className="p-3 text-center font-bold text-slate-800">
+                                  {item.quantity} {item.unit}
+                                </td>
+
+                                {/* Client Offer Price */}
+                                <td className="p-3 text-slate-700">
+                                  <span className="font-semibold block">{formatRupiah(item.targetPrice)}</span>
+                                  <span className="text-[10px] text-slate-400">per {item.unit}</span>
+                                </td>
+
+                                {/* Supplier HPP */}
+                                <td className="p-3 bg-emerald-50/40">
+                                  {effectiveHpp > 0 ? (
+                                    <div>
+                                      <span className="font-black text-emerald-900 text-xs block">
+                                        {formatRupiah(effectiveHpp)}
+                                      </span>
+                                      <span className="text-[9px] text-emerald-700 font-semibold bg-emerald-100 px-1 py-0.2 rounded inline-block mt-0.5">
+                                        ✓ Tersimpan di DB Admin
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded text-xs font-bold border border-amber-200 inline-block">
+                                      Belum Diinput
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Subtotal HPP */}
+                                <td className="p-3 text-right font-black text-slate-900">
+                                  {effectiveHpp > 0 ? (
+                                    formatRupiah(lineTotalHpp)
+                                  ) : (
+                                    <span className="text-slate-400 font-normal italic">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {po.clientNotes && (
+                      <p className="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <strong className="font-semibold text-slate-700">Catatan Klien:</strong> {po.clientNotes}
+                      </p>
+                    )}
+
+                    {po.supplierNotes && (
+                      <p className="text-[11px] text-emerald-800 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                        <strong className="font-semibold text-emerald-900">Catatan Konfirmasi Supplier:</strong> {po.supplierNotes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: INPUT HARGA HPP & TERIMA PESANAN */}
+      {/* ========================================================================= */}
+      {selectedPOForHPP && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-slate-200 animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-gradient-to-r from-emerald-800 to-teal-800 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-base flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-300" />
+                  Konfirmasi Penerimaan Pesanan & Masukkan HPP
+                </h3>
+                <p className="text-xs text-emerald-100 mt-0.5">
+                  Ref PO: <strong>{selectedPOForHPP.poNumber}</strong> • Klien: {selectedPOForHPP.clientName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPOForHPP(null)}
+                className="text-emerald-200 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSaveHPP} className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs">
+                <p className="font-bold flex items-center gap-1.5 text-emerald-900 mb-1">
+                  <Info className="w-4 h-4 text-emerald-700" />
+                  Sinkronisasi Otomatis ke Database Produk Role Admin:
+                </p>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  Setelah Anda memasukkan harga HPP di bawah dan mengonfirmasi, <strong>Nomor ID Produk yang sama</strong>, <strong>Harga HPP (Modal)</strong>, dan seluruh informasi produk akan langsung tersimpan di database produk role Admin.
+                </p>
+              </div>
+
+              {/* Order Info */}
+              <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Target Pengiriman</span>
+                  <span className="font-bold text-slate-800">{selectedPOForHPP.requiredDate}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Alamat Pengiriman</span>
+                  <span className="font-medium text-slate-800 truncate block" title={selectedPOForHPP.deliveryAddress}>
+                    {selectedPOForHPP.deliveryAddress}
+                  </span>
+                </div>
+              </div>
+
+              {/* Items HPP input table */}
+              <div className="space-y-3">
+                <label className="block font-bold text-slate-800 text-xs">
+                  Daftar Produk & Input Harga HPP (Modal Supplier) *:
+                </label>
+
+                {selectedPOForHPP.items
+                  .filter(isItemForCurrentSupplier)
+                  .map((item, idx) => {
+                    const enteredHPP = Number(hppInputs[item.itemId] || 0);
+                    const subtotalHpp = enteredHPP * item.quantity;
+                    const marginPerUnit = item.targetPrice - enteredHPP;
+
+                    return (
+                      <div
+                        key={idx}
+                        className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm">{item.itemName}</span>
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">
+                                ID: {item.itemId}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              SKU: <span className="font-mono">{item.sku}</span> • Kategori:{' '}
+                              <strong>{item.category || 'Bahan Baku'}</strong> • Kuantitas:{' '}
+                              <strong className="text-slate-800">
+                                {item.quantity} {item.unit}
+                              </strong>
+                            </p>
+                          </div>
+
+                          <div className="text-right sm:text-right">
+                            <span className="text-[10px] text-slate-400 block">Penawaran Klien:</span>
+                            <span className="font-bold text-blue-900 text-xs">
+                              {formatRupiah(item.targetPrice)} / {item.unit}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* HPP Input Row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                          <div>
+                            <label className="block font-semibold text-emerald-950 mb-1">
+                              Harga HPP dari Supplier (Modal / {item.unit}) *
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-2.5 font-bold text-emerald-800 text-xs">
+                                Rp
+                              </span>
+                              <input
+                                type="number"
+                                min="1"
+                                placeholder="Contoh: 120000"
+                                value={hppInputs[item.itemId] ?? ''}
+                                onChange={(e) =>
+                                  setHppInputs({
+                                    ...hppInputs,
+                                    [item.itemId]: e.target.value === '' ? '' : Number(e.target.value),
+                                  })
+                                }
+                                className="w-full pl-9 pr-3 py-2 border border-emerald-400 rounded-lg font-black text-emerald-900 text-xs bg-emerald-50/50 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                                required
+                              />
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 text-[11px]">Total Nilai HPP Supplier:</span>
+                              <strong className="text-emerald-900">{formatRupiah(subtotalHpp)}</strong>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className="text-slate-400">Margin Koperasi:</span>
+                              <span
+                                className={`font-semibold ${
+                                  marginPerUnit >= 0 ? 'text-emerald-700' : 'text-red-600'
+                                }`}
+                              >
+                                {formatRupiah(marginPerUnit)} / {item.unit}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* Supplier Notes */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Catatan Konfirmasi Penerimaan Supplier
+                </label>
+                <textarea
+                  rows={2}
+                  value={supplierOrderNotes}
+                  onChange={(e) => setSupplierOrderNotes(e.target.value)}
+                  placeholder="Contoh: Stok barang siap dan spesifikasi sesuai pesanan. Pengiriman akan dilakukan tepat waktu..."
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPOForHPP(null)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl cursor-pointer transition text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl cursor-pointer transition shadow-md flex items-center gap-2 text-xs"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Konfirmasi Terima Pesanan & Simpan HPP ke Database Admin</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: DELIVERIES & INBOUNDS */}
+      {/* ========================================================================= */}
       {activeTab === 'deliveries' && (
         <div className="space-y-4">
           {myInbounds.length === 0 ? (
@@ -321,9 +941,7 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
           ) : (
             myInbounds.map((inb) => {
               const isDone = inb.status === 'SELESAI';
-              const relatedInv = invoices.find(
-                (i) => i.referenceNo === inb.inboundNumber
-              );
+              const relatedInv = invoices.find((i) => i.referenceNo === inb.inboundNumber);
 
               return (
                 <div
@@ -361,45 +979,57 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                        Total Nilai Tagihan
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                        Total Nilai Pasokan
                       </span>
-                      <span className="font-black text-slate-900 text-sm">
+                      <span className="text-base font-black text-slate-900">
                         {formatRupiah(inb.totalAmount)}
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-xs space-y-1.5">
-                    <span className="font-bold text-slate-600 text-[11px]">
-                      Barang yang Dikirim:
-                    </span>
+                  {/* Items list */}
+                  <div className="space-y-2">
                     {inb.items.map((item, idx) => (
                       <div
                         key={idx}
-                        className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between"
+                        className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs"
                       >
-                        <span className="font-semibold text-slate-800">{item.itemName}</span>
+                        <div>
+                          <span className="font-bold text-slate-800">{item.itemName}</span>
+                          <span className="text-slate-400 text-[11px] ml-2">
+                            {item.quantity} {item.unit} @ {formatRupiah(item.unitCost)}
+                          </span>
+                        </div>
                         <span className="font-bold text-slate-900">
-                          {item.quantity} {item.unit} @ {formatRupiah(item.unitCost)}
+                          {formatRupiah(item.totalCost)}
                         </span>
                       </div>
                     ))}
                   </div>
 
-                  {relatedInv && (
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                      <span className="text-slate-500">
-                        Faktur Pembayaran Koperasi: {relatedInv.invoiceNumber}
-                      </span>
-                      <button
-                        onClick={() => openInvoiceModal(relatedInv)}
-                        className="font-bold text-emerald-700 hover:underline cursor-pointer"
-                      >
-                        Cek Status Pembayaran ↗
-                      </button>
-                    </div>
-                  )}
+                  {/* Inbound footer info */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+                    <span className="text-slate-500 text-[11px]">
+                      Catatan Armada: {inb.warehouseNotes || '-'}
+                    </span>
+                    {relatedInv && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-500">Status Pembayaran:</span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            relatedInv.status === 'LUNAS'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : relatedInv.status === 'MENUNGGU_KONFIRMASI'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {relatedInv.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })
@@ -407,146 +1037,84 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
         </div>
       )}
 
-      {/* TAB 2: Database Produk & Item yang Dijual oleh Supplier */}
+      {/* ========================================================================= */}
+      {/* TAB 3: PRODUCTS DATABASE */}
+      {/* ========================================================================= */}
       {activeTab === 'products' && (
-        <div className="space-y-5">
-          {/* Stats Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                <span>Total Produk Saya</span>
-                <Boxes className="w-4 h-4 text-emerald-600" />
-              </div>
-              <p className="text-2xl font-black text-slate-900 mt-1.5">
-                {myProducts.length} <span className="text-xs font-normal text-slate-500">Item Produk</span>
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Terdaftar di database pasokan koperasi
-              </p>
-            </div>
-
-            <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                <span>Bahan Baku</span>
-                <Layers className="w-4 h-4 text-amber-500" />
-              </div>
-              <p className="text-2xl font-black text-amber-600 mt-1.5">
-                {myProducts.filter((p) => p.category === 'Bahan Baku').length}{' '}
-                <span className="text-xs font-normal text-slate-500">Komoditas</span>
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Hasil pertanian, perkebunan & material baku
-              </p>
-            </div>
-
-            <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                <span>Bahan Operasional</span>
-                <Package className="w-4 h-4 text-blue-500" />
-              </div>
-              <p className="text-2xl font-black text-blue-600 mt-1.5">
-                {myProducts.filter((p) => p.category === 'Bahan Operasional').length}{' '}
-                <span className="text-xs font-normal text-slate-500">Item Operasional</span>
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Kebutuhan logistik, perlengkapan & operasional
-              </p>
-            </div>
-          </div>
-
-          {/* Action Header & Search Filter */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="Cari nama produk, SKU, spesifikasi..."
-                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="font-semibold text-slate-500">Kategori:</span>
-                <select
-                  value={productCategoryFilter}
-                  onChange={(e) => setProductCategoryFilter(e.target.value)}
-                  className="text-xs p-2 border border-slate-300 rounded-lg bg-white"
-                >
-                  <option value="Semua">Semua Kategori</option>
-                  <option value="Bahan Baku">Bahan Baku</option>
-                  <option value="Bahan Operasional">Bahan Operasional</option>
-                </select>
+        <div className="space-y-4">
+          <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Cari produk / SKU saya..."
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-xs"
+                />
               </div>
 
-              <button
-                onClick={() => setShowAddProductModal(true)}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer whitespace-nowrap"
+              <select
+                value={productCategoryFilter}
+                onChange={(e) => setProductCategoryFilter(e.target.value)}
+                className="p-2 border border-slate-300 rounded-lg text-xs bg-white font-medium"
               >
-                <Plus className="w-4 h-4" />
-                <span>+ Tambah Produk</span>
-              </button>
+                <option value="Semua">Semua Kategori</option>
+                <option value="Bahan Baku">Bahan Baku</option>
+                <option value="Bahan Operasional">Bahan Operasional</option>
+              </select>
             </div>
+
+            <button
+              onClick={() => setShowAddProductModal(true)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs w-full sm:w-auto justify-center"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Daftarkan Produk Baru</span>
+            </button>
           </div>
 
-          {/* Products List Table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="p-3.5">SKU & Nama Produk</th>
-                    <th className="p-3.5">Kategori</th>
-                    <th className="p-3.5">Satuan</th>
-                    <th className="p-3.5">Harga Penawaran / Modal</th>
-                    <th className="p-3.5">Stok Siap Pasok</th>
-                    <th className="p-3.5">Asal Gudang / Sentra</th>
-                    <th className="p-3.5 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredProducts.length === 0 ? (
+          {filteredProducts.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+              <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-slate-700">Belum Ada Produk Terdaftar</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                Daftarkan produk atau item pasokan Anda ke database agar dapat dipilih oleh Klien saat membuat Purchase Order (PO).
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
                     <tr>
-                      <td colSpan={7} className="p-10 text-center text-slate-400">
-                        <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                        <p className="font-semibold text-slate-600 text-sm">
-                          {myProducts.length === 0
-                            ? 'Belum ada produk yang dimasukkan ke database.'
-                            : 'Tidak ada produk yang cocok dengan pencarian.'}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                          {myProducts.length === 0
-                            ? 'Daftarkan barang, komoditas, dan item yang siap Anda jual ke Koperasi Garuda Merah Putih.'
-                            : 'Coba ubah kata kunci pencarian atau filter kategori Anda.'}
-                        </p>
-                        {myProducts.length === 0 && (
-                          <button
-                            onClick={() => setShowAddProductModal(true)}
-                            className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs inline-flex items-center gap-1.5"
-                          >
-                            <Plus className="w-4 h-4" />
-                            <span>Daftarkan Produk Pertama Anda</span>
-                          </button>
-                        )}
-                      </td>
+                      <th className="p-3.5">ID & SKU Produk</th>
+                      <th className="p-3.5">Nama Produk</th>
+                      <th className="p-3.5">Kategori</th>
+                      <th className="p-3.5">Satuan</th>
+                      <th className="p-3.5">Harga HPP (Modal)</th>
+                      <th className="p-3.5">Kapasitas Stok</th>
+                      <th className="p-3.5">Lokasi Gudang</th>
+                      <th className="p-3.5 text-right">Aksi</th>
                     </tr>
-                  ) : (
-                    filteredProducts.map((item) => (
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredProducts.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50/70 transition">
                         <td className="p-3.5">
-                          <span className="font-mono text-[10px] font-bold text-emerald-700 block">
-                            {item.sku}
+                          <span className="font-mono text-emerald-800 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] block max-w-fit">
+                            ID: {item.id}
                           </span>
-                          <span className="font-bold text-slate-900 text-xs block">
-                            {item.name}
+                          <span className="font-mono text-[10px] text-slate-500 block mt-0.5">
+                            SKU: {item.sku}
                           </span>
-                          {item.description && (
-                            <span className="text-[10px] text-slate-400 line-clamp-1">
-                              {item.description}
-                            </span>
-                          )}
+                        </td>
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-900 block">{item.name}</span>
+                          <span className="text-[10px] text-slate-400 line-clamp-1">
+                            {item.description}
+                          </span>
                         </td>
                         <td className="p-3.5">
                           <span
@@ -559,55 +1127,47 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                             {item.category}
                           </span>
                         </td>
-                        <td className="p-3.5 text-slate-600 font-medium">{item.unit}</td>
-                        <td className="p-3.5 font-bold text-slate-900">
-                          {item.costPrice ? formatRupiah(item.costPrice) : '-'}
+                        <td className="p-3.5 font-bold text-slate-700">{item.unit}</td>
+                        <td className="p-3.5 font-black text-emerald-900">
+                          {formatRupiah(item.costPrice)}
                         </td>
-                        <td className="p-3.5">
-                          <span className="font-black text-sm text-slate-800">
-                            {item.currentStock} {item.unit}
-                          </span>
+                        <td className="p-3.5 text-slate-800">
+                          {item.currentStock} {item.unit}
                         </td>
-                        <td className="p-3.5 text-slate-500 text-[11px]">
-                          {item.warehouseLocation || 'Sentra Pemasok'}
+                        <td className="p-3.5 text-slate-500 font-mono text-[11px]">
+                          {item.warehouseLocation}
                         </td>
                         <td className="p-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleQuickSend(item)}
-                              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg transition cursor-pointer flex items-center gap-1 border border-emerald-200 shadow-2xs"
-                              title="Kirim Pasokan Item Ini ke Gudang Koperasi"
-                            >
-                              <Send className="w-3 h-3" />
-                              <span>Kirim Pasokan</span>
-                            </button>
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleStartEditProduct(item)}
-                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer border border-slate-200 bg-white"
-                              title="Edit Detail Produk"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                              title="Edit Data Produk"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDeleteProduct(item)}
-                              className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer border border-slate-200 bg-white"
-                              title="Hapus Produk dari Database"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                              title="Hapus Produk"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* TAB 3: Invoices Tab */}
+      {/* ========================================================================= */}
+      {/* TAB 4: INVOICES & PAYMENTS */}
+      {/* ========================================================================= */}
       {activeTab === 'invoices' && (
         <div className="space-y-4">
           {myInvoices.length === 0 ? (
@@ -615,14 +1175,14 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
               <DollarSign className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <h3 className="text-sm font-bold text-slate-700">Belum Ada Tagihan Pembayaran</h3>
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                Tagihan hutang dagang akan otomatis tercatat setiap kali ada jadwal pengiriman pasokan yang masuk.
+                Faktur tagihan pembayaran dari koperasi akan diterbitkan otomatis setiap kali pengiriman pasokan selesai diterima gudang.
               </p>
             </div>
           ) : (
             myInvoices.map((inv) => (
               <div
                 key={inv.id}
-                className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
               >
                 <div>
                   <div className="flex items-center gap-2">
@@ -636,11 +1196,11 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                           : 'bg-amber-100 text-amber-800'
                       }`}
                     >
-                      {inv.status === 'LUNAS' ? '✓ DANA DICAIRKAN' : 'MENUNGGU PENCAIRAN'}
+                      {inv.status.replace('_', ' ')}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    Referensi Pasokan: <span className="font-mono font-bold text-slate-800">{inv.referenceNo}</span> | Jatuh Tempo: {inv.dueDate}
+                    Referensi Surat Jalan: <span className="font-mono font-bold text-slate-700">{inv.referenceNo}</span> • Jatuh Tempo: {inv.dueDate}
                   </p>
                   <p className="text-base font-black text-slate-900 mt-1">
                     {formatRupiah(inv.totalAmount)}
@@ -649,10 +1209,10 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
 
                 <button
                   onClick={() => openInvoiceModal(inv)}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"
                 >
                   <Receipt className="w-4 h-4" />
-                  <span>Lihat Bukti Faktur</span>
+                  <span>Lihat Bukti Pencairan / Faktur</span>
                 </button>
               </div>
             ))
@@ -660,35 +1220,45 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 1: Tambah Produk Baru ke Database Supplier */}
+      {/* ========================================================================= */}
+      {/* MODAL: DAFTAR PRODUK BARU */}
+      {/* ========================================================================= */}
       {showAddProductModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 border border-slate-200 animate-in fade-in zoom-in-95">
-            <h3 className="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 mb-4 flex items-center gap-2">
-              <Package className="w-5 h-5 text-emerald-600" />
-              Masukkan Produk Baru ke Database Penjualan
-            </h3>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] overflow-hidden flex flex-col border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 bg-emerald-700 text-white flex items-center justify-between">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Package className="w-5 h-5 text-emerald-200" />
+                Daftarkan Produk Baru ke Database
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddProductModal(false)}
+                className="text-emerald-200 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form onSubmit={handleCreateProduct} className="space-y-3.5 text-xs">
+            <form onSubmit={handleCreateProduct} className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Nama Produk / Item *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Beras Premium Ramos 25kg"
+                  value={newProduct.name}
+                  onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg font-bold"
+                  required
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Kode SKU Produk
-                  </label>
-                  <input
-                    type="text"
-                    value={newProduct.sku}
-                    onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
-                    placeholder="Contoh: SUP-BRS-01 (Opsional)"
-                    className="w-full p-2 border border-slate-300 rounded-lg font-mono uppercase"
-                  />
-                  <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Kosongkan jika ingin dibuat otomatis
-                  </span>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Kategori Produk <span className="text-red-500">*</span>
+                    Kategori Produk *
                   </label>
                   <select
                     value={newProduct.category}
@@ -698,60 +1268,48 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                         category: e.target.value as InventoryItem['category'],
                       })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg bg-white font-semibold"
+                    className="w-full p-2.5 border border-slate-300 rounded-lg bg-white font-medium"
                   >
                     <option value="Bahan Baku">Bahan Baku</option>
                     <option value="Bahan Operasional">Bahan Operasional</option>
                   </select>
                 </div>
-              </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Nama Produk / Item Komoditas <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                  placeholder="Contoh: Beras Premium Setra Ramos 25kg"
-                  className="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Satuan <span className="text-red-500">*</span>
+                    Satuan Unit (Kemasan) *
                   </label>
                   <input
                     type="text"
+                    placeholder="Kg, Sak, Rim, Dus, Liter"
                     value={newProduct.unit}
                     onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
-                    placeholder="Kg / Sak / Dus / Rim"
-                    className="w-full p-2 border border-slate-300 rounded-lg"
+                    className="w-full p-2.5 border border-slate-300 rounded-lg font-medium"
                     required
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Harga Modal / Beli (Rp) <span className="text-red-500">*</span>
+                    Harga HPP / Modal Jual (Rp) *
                   </label>
                   <input
                     type="number"
-                    min="0"
+                    min="1"
                     value={newProduct.costPrice}
                     onChange={(e) =>
                       setNewProduct({ ...newProduct, costPrice: Number(e.target.value) })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg font-bold"
+                    className="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-emerald-800"
                     required
                   />
                 </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Kapasitas Pasokan
+                    Kapasitas Stok Tersedia
                   </label>
                   <input
                     type="number"
@@ -760,39 +1318,36 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                     onChange={(e) =>
                       setNewProduct({ ...newProduct, availableStock: Number(e.target.value) })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    required
+                    className="w-full p-2.5 border border-slate-300 rounded-lg font-medium"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Asal Sentra / Lokasi Gudang Pemasok
+                  Lokasi Gudang / Asal Pengiriman
                 </label>
                 <input
                   type="text"
+                  placeholder="Gudang Sentra Produksi, Karawang"
                   value={newProduct.warehouseLocation}
                   onChange={(e) =>
                     setNewProduct({ ...newProduct, warehouseLocation: e.target.value })
                   }
-                  placeholder="Contoh: Sentra Penggilingan Padi Karawang Blok C"
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg"
                 />
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Spesifikasi Mutu & Keterangan Produk
+                  Deskripsi / Spesifikasi Produk
                 </label>
                 <textarea
                   rows={2}
+                  placeholder="Kualitas grade A, kadar air < 14%, kemasan karung berlapis..."
                   value={newProduct.description}
-                  onChange={(e) =>
-                    setNewProduct({ ...newProduct, description: e.target.value })
-                  }
-                  placeholder="Kadar air, derajat sosoh, masa kedaluwarsa, atau standar mutu..."
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg"
                 />
               </div>
 
@@ -806,9 +1361,9 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg cursor-pointer transition shadow-xs"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg cursor-pointer transition shadow-xs"
                 >
-                  Simpan ke Database Produk
+                  Simpan Produk
                 </button>
               </div>
             </form>
@@ -816,24 +1371,35 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 2: Edit Produk Database Supplier */}
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT PRODUK */}
+      {/* ========================================================================= */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 border border-slate-200 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Edit className="w-5 h-5 text-blue-600" />
-                Edit Data Produk Supplier
-              </h3>
-              <span className="font-mono text-xs px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded">
-                {editingProduct.sku}
-              </span>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] overflow-hidden flex flex-col border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 bg-emerald-700 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-base flex items-center gap-2">
+                  <Edit className="w-5 h-5 text-emerald-200" />
+                  Edit Data Produk & HPP
+                </h3>
+                <span className="text-[10px] text-emerald-200 font-mono">
+                  ID: {editingProduct.id} • SKU: {editingProduct.sku}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="text-emerald-200 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
 
-            <form onSubmit={handleSaveEditProduct} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSaveEditProduct} className="p-6 overflow-y-auto space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Nama Produk / Item Komoditas <span className="text-red-500">*</span>
+                  Nama Produk *
                 </label>
                 <input
                   type="text"
@@ -841,7 +1407,7 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                   onChange={(e) =>
                     setEditProductForm({ ...editProductForm, name: e.target.value })
                   }
-                  className="w-full p-2.5 border-2 border-blue-500 rounded-lg font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg font-bold"
                   required
                 />
               </div>
@@ -849,7 +1415,7 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Kategori Produk
+                    Kategori *
                   </label>
                   <select
                     value={editProductForm.category}
@@ -859,15 +1425,16 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                         category: e.target.value as InventoryItem['category'],
                       })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg bg-white font-semibold"
+                    className="w-full p-2.5 border border-slate-300 rounded-lg bg-white font-medium"
                   >
                     <option value="Bahan Baku">Bahan Baku</option>
                     <option value="Bahan Operasional">Bahan Operasional</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Satuan
+                    Satuan Unit *
                   </label>
                   <input
                     type="text"
@@ -875,7 +1442,7 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                     onChange={(e) =>
                       setEditProductForm({ ...editProductForm, unit: e.target.value })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg"
+                    className="w-full p-2.5 border border-slate-300 rounded-lg font-medium"
                     required
                   />
                 </div>
@@ -884,11 +1451,11 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Harga Penawaran / Modal (Rp)
+                    Harga HPP / Modal Jual (Rp) *
                   </label>
                   <input
                     type="number"
-                    min="0"
+                    min="1"
                     value={editProductForm.costPrice}
                     onChange={(e) =>
                       setEditProductForm({
@@ -896,13 +1463,14 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                         costPrice: Number(e.target.value),
                       })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg font-bold"
+                    className="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-emerald-800"
                     required
                   />
                 </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Kapasitas Pasokan Siap Kirim
+                    Kapasitas Stok Tersedia
                   </label>
                   <input
                     type="number"
@@ -914,15 +1482,14 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                         availableStock: Number(e.target.value),
                       })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    required
+                    className="w-full p-2.5 border border-slate-300 rounded-lg font-medium"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Asal Sentra / Lokasi Gudang Pemasok
+                  Lokasi Gudang
                 </label>
                 <input
                   type="text"
@@ -933,24 +1500,21 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                       warehouseLocation: e.target.value,
                     })
                   }
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg"
                 />
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Spesifikasi & Mutu Produk
+                  Deskripsi / Spesifikasi
                 </label>
                 <textarea
                   rows={2}
                   value={editProductForm.description}
                   onChange={(e) =>
-                    setEditProductForm({
-                      ...editProductForm,
-                      description: e.target.value,
-                    })
+                    setEditProductForm({ ...editProductForm, description: e.target.value })
                   }
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg"
                 />
               </div>
 
@@ -964,7 +1528,7 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg cursor-pointer transition shadow-xs"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg cursor-pointer transition shadow-xs"
                 >
                   Simpan Perubahan
                 </button>
@@ -974,28 +1538,39 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 3: Kirim Jadwal Pasokan Baru */}
+      {/* ========================================================================= */}
+      {/* MODAL: KIRIM PASOKAN BARU */}
+      {/* ========================================================================= */}
       {showSendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 border border-slate-200 animate-in fade-in zoom-in-95">
-            <h3 className="text-base font-bold text-slate-900 pb-3 border-b border-slate-100 mb-4 flex items-center gap-2">
-              <Truck className="w-5 h-5 text-emerald-600" />
-              Kirim Jadwal Pasokan Baru ke Gudang Koperasi
-            </h3>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[92vh] overflow-hidden flex flex-col border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="px-6 py-4 bg-emerald-700 text-white flex items-center justify-between">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Truck className="w-5 h-5 text-emerald-200" />
+                Jadwalkan Pengiriman Pasokan Baru
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSendModal(false)}
+                className="text-emerald-200 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form onSubmit={handleSendSupply} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSendSupply} className="p-6 overflow-y-auto space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Pilih Barang Pasokan
+                  Pilih Komoditas / Barang Pasokan *
                 </label>
                 <select
                   value={selectedItemId}
                   onChange={(e) => {
                     setSelectedItemId(e.target.value);
                     const itm = inventory.find((i) => i.id === e.target.value);
-                    if (itm) setCostPrice(itm.costPrice);
+                    if (itm) setCostPrice(itm.costPrice || 100000);
                   }}
-                  className="w-full p-2.5 border border-slate-300 rounded-lg bg-white"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg bg-white font-medium"
                 >
                   {myProducts.length > 0 && (
                     <optgroup label="⭐ Produk Terdaftar Saya">

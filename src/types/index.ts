@@ -81,6 +81,9 @@ export interface POItem {
   notes?: string;
   category?: 'Bahan Operasional' | 'Bahan Baku';
   supplierName?: string;
+  costPrice?: number; // HPP dari Supplier (Rp)
+  supplierCostPrice?: number; // Alias HPP dari Supplier
+  supplierStatus?: 'MENUNGGU' | 'DITERIMA' | 'DIPROSES';
 }
 
 export type POStatus = 
@@ -121,6 +124,7 @@ export interface PurchaseOrder {
   deliveryAddress: string;
   clientNotes?: string;
   cooperativeNotes?: string;
+  supplierNotes?: string;
   invoiceId?: string;
   officialOrderNumber?: string;
   isOfficialOrder?: boolean;

@@ -55,6 +55,8 @@ const MainLayout: React.FC = () => {
 
     if (currentUser.role === 'supplier') {
       switch (currentTab) {
+        case 'supplier-orders':
+          return <SupplierPortalView initialSubTab="orders" />;
         case 'supplier-portal':
         case 'supplier-deliveries':
           return <SupplierPortalView initialSubTab="deliveries" />;
@@ -63,7 +65,7 @@ const MainLayout: React.FC = () => {
         case 'supplier-invoices':
           return <SupplierPortalView initialSubTab="invoices" />;
         default:
-          return <SupplierPortalView initialSubTab="deliveries" />;
+          return <SupplierPortalView initialSubTab="orders" />;
       }
     }
 
@@ -91,6 +93,8 @@ const MainLayout: React.FC = () => {
         return <ClientPortalView initialSubTab="track" />;
       case 'client-invoices':
         return <ClientPortalView initialSubTab="invoices" />;
+      case 'supplier-orders':
+        return <SupplierPortalView initialSubTab="orders" />;
       case 'supplier-portal':
       case 'supplier-deliveries':
         return <SupplierPortalView initialSubTab="deliveries" />;

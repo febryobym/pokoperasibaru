@@ -304,10 +304,18 @@ export const InventoryView: React.FC = () => {
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/70 transition">
                         <td className="p-3.5">
-                          <span className="font-mono text-[10px] font-bold text-red-600 block">
-                            {item.sku}
-                          </span>
-                          <div className="flex items-center gap-1.5 group">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono text-[10px] font-bold text-red-600">
+                              {item.sku}
+                            </span>
+                            <span
+                              className="font-mono text-[9px] text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200"
+                              title="Nomor ID Produk (Tersinkronisasi dengan Supplier)"
+                            >
+                              ID: {item.id}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 group mt-0.5">
                             <span className="font-bold text-slate-900 text-xs block">
                               {item.name}
                             </span>
@@ -353,7 +361,22 @@ export const InventoryView: React.FC = () => {
                           </div>
                         </td>
                         <td className="p-3.5 text-slate-600">{item.unit}</td>
-                        <td className="p-3.5 text-slate-600">{formatRupiah(item.costPrice)}</td>
+                        <td className="p-3.5">
+                          {item.costPrice > 0 ? (
+                            <div>
+                              <span className="font-bold text-slate-900 block">
+                                {formatRupiah(item.costPrice)}
+                              </span>
+                              <span className="text-[9px] text-emerald-700 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 inline-block mt-0.5">
+                                ✓ HPP Supplier
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">
+                              Belum Diinput Supplier
+                            </span>
+                          )}
+                        </td>
                         <td className="p-3.5 font-bold text-slate-900">
                           {formatRupiah(item.standardPrice)}
                         </td>

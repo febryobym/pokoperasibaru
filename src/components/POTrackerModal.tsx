@@ -323,6 +323,9 @@ export const POTrackerModal: React.FC = () => {
                         <td className="p-3 font-semibold text-slate-800">
                           {item.itemName}
                           <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span className="text-[9px] font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              ID: {item.itemId}
+                            </span>
                             <span className="text-[10px] font-mono text-slate-400">
                               {item.sku}
                             </span>
@@ -342,6 +345,12 @@ export const POTrackerModal: React.FC = () => {
                                 • Supplier: {item.supplierName}
                               </span>
                             )}
+                            {(currentUser.role === 'admin' || currentUser.role === 'supplier') &&
+                              (item.costPrice || item.supplierCostPrice) && (
+                                <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                  HPP: {formatRupiah(item.costPrice || item.supplierCostPrice || 0)}
+                                </span>
+                              )}
                           </div>
                         </td>
                         <td className="p-3 text-slate-700">

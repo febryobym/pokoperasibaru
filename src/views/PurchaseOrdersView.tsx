@@ -811,23 +811,74 @@ export const PurchaseOrdersView: React.FC = () => {
                             className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between"
                           >
                             <div>
-                              <p className="font-bold text-slate-800">{item.itemName}</p>
-                              <p className="text-[10px] text-slate-500">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-bold text-slate-800">{item.itemName}</p>
+                                <span className="font-mono text-[9px] text-slate-600 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                                  ID: {item.itemId}
+                                </span>
+                                {item.category && (
+                                  <span
+                                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                      item.category === 'Bahan Baku'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-blue-100 text-blue-800'
+                                    }`}
+                                  >
+                                    {item.category}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
                                 Kuantitas:{' '}
                                 <span className="font-bold text-slate-700">
                                   {item.quantity} {item.unit}
                                 </span>{' '}
-                                • Standar Katalog: {formatRupiah(item.standardPrice)}
+                                {item.supplierName && (
+                                  <span>
+                                    • Supplier:{' '}
+                                    <strong className="text-slate-700">{item.supplierName}</strong>
+                                  </span>
+                                )}
                               </p>
                               {currentUser.role === 'admin' && (
-                                <p className="text-[10px] text-slate-400">
-                                  Modal Supplier: {formatRupiah(supCost)} | Profit Koperasi:{' '}
-                                  <span
-                                    className={`font-semibold ${itemMargin >= 0 ? 'text-emerald-600' : 'text-red-500'}`}
-                                  >
-                                    {formatRupiah(itemMargin)}/unit
-                                  </span>
-                                </p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  <p className="text-[10px] text-slate-500">
+                                    HPP dari Supplier:{' '}
+                                    <strong className="text-slate-800">
+                                      {item.costPrice || item.supplierCostPrice
+                                        ? formatRupiah(item.costPrice || item.supplierCostPrice || 0)
+                                        : formatRupiah(supCost)}
+                                    </strong>
+                                    {item.costPrice || item.supplierCostPrice ? (
+                                      <span className="ml-1 text-[9px] text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded font-bold border border-emerald-200">
+                                        ✓ Ditetapkan Supplier
+                                      </span>
+                                    ) : (
+                                      <span className="ml-1 text-[9px] text-amber-700 bg-amber-50 px-1 py-0.2 rounded font-bold border border-amber-200">
+                                        Menunggu Input Supplier
+                                      </span>
+                                    )}
+                                  </p>
+                                  <span className="text-[10px] text-slate-300">|</span>
+                                  <p className="text-[10px] text-slate-500">
+                                    Margin Koperasi:{' '}
+                                    <span
+                                      className={`font-semibold ${
+                                        item.targetPrice -
+                                          (item.costPrice || item.supplierCostPrice || supCost) >=
+                                        0
+                                          ? 'text-emerald-600'
+                                          : 'text-red-500'
+                                      }`}
+                                    >
+                                      {formatRupiah(
+                                        item.targetPrice -
+                                          (item.costPrice || item.supplierCostPrice || supCost)
+                                      )}
+                                      /unit
+                                    </span>
+                                  </p>
+                                </div>
                               )}
                               {item.notes && (
                                 <p className="text-[10px] text-blue-600 italic mt-0.5">{item.notes}</p>
